@@ -1,0 +1,4 @@
+# Colab Desktop Runner v1.0.0 — SHA-256
+c9c5f664dfc2a670330de46f5ff8005bf40783d2bff5a2df409ad53fb17feae1  app-debug.apk
+f24526f7df4ea45af1bfe2d850195d6158eee1cfe6d56066a3612c6765ed29f6  app-release.apk (موقع)
+577919c117f49d6f956dc0cf7215901cebd7ace10a729be6f86cd127267ddc64  app-release.aab (موقع)
