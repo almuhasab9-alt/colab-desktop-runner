@@ -156,3 +156,43 @@ flutter analyze     # لا أخطاء (تنبيهات deprecation فقط لـ Ra
 ```
 
 تغطي الاختبارات: التحقق من HTTPS ورفض HTTP، كود التشغيل، الاحتفاظ بمرجع الملف بعد إعادة التشغيل، أسماء الملفات العربية والمسافات، عدم تخزين بيانات حساسة، شاشة الخصوصية، الشاشة الرئيسية وRTL، تأكيد النطاق قبل الفتح، مساعد التشغيل، تدرج إعادة الاتصال.
+
+## هيكل الفروع والمساهمة
+
+- `main`: الفرع المستقر — كل إصدار يُوسَم بـ Tag منه.
+- `develop`: فرع التطوير النشط — تُدمج فيه الميزات قبل الوصول إلى `main`.
+- CI عبر GitHub Actions (`.github/workflows/ci.yml`): تحليل + اختبارات + بناء Debug عند كل Push/PR. **لا توجد أي أسرار داخل ملفات الـ Workflow.**
+- مفاتيح التوقيع (`*.jks`, `key.properties`) **محظورة نهائيًا من Git** عبر `.gitignore` وتُدار محليًا فقط.
+
+---
+
+# English Summary
+
+**Colab Desktop Runner** (`com.almuhasab.colabdesktoprunner`) — a secure, Arabic-first (RTL) Android app built with Flutter + native Kotlin that:
+
+- Opens Google Colab through the **official Custom Tabs** browser (never intercepts Google login, no fake User-Agent; WebView login attempts are auto-redirected to Custom Tab to respect Google's `disallowed_useragent` policy).
+- Picks Python scripts via **Storage Access Framework** only — zero storage permissions.
+- Copies a ready-made Colab runner snippet to the clipboard.
+- Provides a fully user-controlled 8-step run assistant (no AccessibilityService, no auto-clicking).
+- Includes a dedicated **desktop WebView** for temporary desktop URLs: HTTPS-only, per-domain approval, no SSL bypass, reconnect backoff (2/5/10/20s then stop), precise drag mode with 3 sensitivity levels, keep-screen-on via native `FLAG_KEEP_SCREEN_ON`, and SAF-based file upload.
+
+### Build
+
+```bash
+flutter pub get
+flutter build apk --debug      # unsigned-debug for testing
+flutter build apk --release    # requires local android/key.properties (never committed)
+```
+
+### Security highlights
+
+- Single permission: `INTERNET`. No storage/camera/location/contacts permissions, no `QUERY_ALL_PACKAGES`.
+- `usesCleartextTraffic=false` + `network_security_config` (HTTPS only), backups exclude WebView data.
+- No analytics, no telemetry, no ads, no secrets in code or Git history.
+- R8/ProGuard enabled with log stripping for release builds.
+
+### Branches & CI
+
+- `main` (stable, tagged releases) / `develop` (active development).
+- GitHub Actions CI runs analyze + tests + debug build on every push/PR. No secrets in workflows.
+- Signing keys (`*.jks`, `key.properties`) are strictly excluded from Git.
