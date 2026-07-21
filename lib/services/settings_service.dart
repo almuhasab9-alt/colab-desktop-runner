@@ -17,6 +17,7 @@ class SettingsService {
   static const _kUrlHistory = 'url_history';
   static const _kFitScreen = 'fit_screen';
   static const _kAssistantProgress = 'assistant_progress';
+  static const _kPowerMode = 'power_mode'; // auto|balanced|strong|ultra|performance
 
   final SharedPreferences _prefs;
   SettingsService(this._prefs);
@@ -118,6 +119,11 @@ class SettingsService {
       _prefs.getStringList(_kAssistantProgress) ?? [];
   Future<void> setAssistantProgress(List<String> done) =>
       _prefs.setStringList(_kAssistantProgress, done);
+
+  // ---- وضع توفير الطاقة ----
+  /// الافتراضي: 'auto' (تلقائي/ذكي)
+  String get powerMode => _prefs.getString(_kPowerMode) ?? 'auto';
+  Future<void> setPowerMode(String v) => _prefs.setString(_kPowerMode, v);
 
   // ---- إعادة ضبط التطبيق ----
   Future<void> resetAll() => _prefs.clear();
