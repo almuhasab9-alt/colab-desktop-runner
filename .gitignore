@@ -43,3 +43,28 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ===== Secrets & signing (NEVER commit) =====
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties
+**/key.properties
+android/release-key.jks
+google-services.json
+firebase-admin-sdk*.json
+*secret*
+*token*.txt
+.env
+.env.*
+
+# Update signing keys (Phase 5 - Ed25519 private key must never be committed)
+tools/keys/
+*.priv
+
+# Local artifacts
+*.apk
+*.aab
+flutter*.log
+server.log
