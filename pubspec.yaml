@@ -1,0 +1,44 @@
+name: colab_desktop_runner
+description: "Colab Desktop Runner - واجهة آمنة لتشغيل سكربت سطح المكتب داخل Google Colab"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # إدارة الحالة
+  provider: 6.1.5+1
+
+  # فتح Colab عبر Custom Tabs الرسمية (المسار الآمن لتسجيل دخول Google)
+  url_launcher: 6.3.1
+
+  # اختيار الملفات عبر Storage Access Framework (بدون أذونات تخزين)
+  file_picker: 8.1.4
+
+  # WebView مخصص لرابط سطح المكتب فقط (وليس لتسجيل دخول Google)
+  webview_flutter: 4.13.0
+
+  # تخزين الإعدادات غير الحساسة
+  shared_preferences: 2.5.3
+
+  # مشاركة الملفات
+  share_plus: 10.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
