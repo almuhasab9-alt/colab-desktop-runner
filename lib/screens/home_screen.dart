@@ -324,12 +324,16 @@ class _FileCard extends StatelessWidget {
                 key: const Key('pick_file_button'),
                 icon: const Icon(Icons.folder_open_outlined),
                 label: const Text('اختيار ملف السكربت'),
-                onPressed: () async {
-                  final ok = await vm.pickScriptFile();
-                  if (!ok && context.mounted) {
-                    HomeScreen.showSnack(context, 'لم يتم اختيار أي ملف.');
-                  }
-                },
+                // حماية من النقر المتكرر: معطّل أثناء فتح نافذة الاختيار
+                onPressed: vm.pickingFile
+                    ? null
+                    : () async {
+                        final ok = await vm.pickScriptFile();
+                        if (!ok && context.mounted) {
+                          HomeScreen.showSnack(
+                              context, 'لم يتم اختيار أي ملف.');
+                        }
+                      },
               )
             else ...[
               Container(
@@ -380,7 +384,8 @@ class _FileCard extends StatelessWidget {
                       key: const Key('change_file_button'),
                       icon: const Icon(Icons.swap_horiz, size: 18),
                       label: const Text('تغيير'),
-                      onPressed: () => vm.pickScriptFile(),
+                      onPressed:
+                          vm.pickingFile ? null : () => vm.pickScriptFile(),
                     ),
                   ),
                   const SizedBox(width: 8),
