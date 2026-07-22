@@ -10,8 +10,10 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../core/constants.dart';
+import '../core/power_policy.dart';
 import '../services/launcher_service.dart';
 import '../services/native_service.dart';
+import '../services/power_service.dart';
 import '../services/settings_service.dart';
 
 /// متصفح سطح المكتب المخصص.
@@ -60,10 +62,17 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
     final settings = context.read<SettingsService>();
     _fitScreen = settings.fitScreen;
     _initWebView(settings);
-    // إبقاء الشاشة مضاءة أثناء الجلسة (وفق الإعدادات)
-    if (settings.keepScreenOn) {
-      NativeService.setKeepScreenOn(true);
-    }
+    // إبقاء الشاشة مضاءة أثناء الجلسة — فقط إذا سمحت سياسة الطاقة
+    _applyKeepScreenOnPolicy();
+  }
+
+  /// تفعيل إبقاء الشاشة مضاءة فقط إذا فعّلها المستخدم **وسمحت** سياسة
+  /// الطاقة الحالية (وضع "توفير فائق" يمنعها).
+  void _applyKeepScreenOnPolicy() {
+    final settings = context.read<SettingsService>();
+    final policy = context.read<PowerService>().policy;
+    NativeService.setKeepScreenOn(
+        settings.keepScreenOn && policy.allowKeepScreenOn);
   }
 
   void _initWebView(SettingsService settings) {
@@ -222,12 +231,13 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
 
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
-    if (_reconnectAttempt >= AppConstants.maxAutoReconnectAttempts) {
+    // سياسة الطاقة المركزية تحدد عدد المحاولات وطول الفواصل (مع Jitter)
+    final policy = context.read<PowerService>().policy;
+    final delay = PowerPolicyEngine.delayForAttempt(policy, _reconnectAttempt);
+    if (delay < 0) {
       setState(() => _countdown = 0);
       return; // توقف بعد عدد محدود من المحاولات
     }
-    final delay =
-        AppConstants.reconnectBackoffSeconds[_reconnectAttempt];
     setState(() => _countdown = delay);
     _reconnectTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
@@ -374,8 +384,7 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
       _reconnectTimer?.cancel();
       NativeService.setKeepScreenOn(false);
     } else if (state == AppLifecycleState.resumed) {
-      final settings = context.read<SettingsService>();
-      if (settings.keepScreenOn) NativeService.setKeepScreenOn(true);
+      _applyKeepScreenOnPolicy();
       if (_disconnected) _scheduleReconnect();
     }
   }

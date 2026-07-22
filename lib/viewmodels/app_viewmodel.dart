@@ -73,9 +73,16 @@ class AppViewModel extends ChangeNotifier {
     }
   }
 
+  /// حماية من النقر المتكرر: لا تُفتح نافذة اختيار ثانية أثناء فتح الأولى.
+  bool _pickingFile = false;
+  bool get pickingFile => _pickingFile;
+
   /// اختيار ملف عبر Storage Access Framework (ACTION_OPEN_DOCUMENT)
   /// file_picker يستخدم SAF على أندرويد مع persistable permission تلقائيًا.
   Future<bool> pickScriptFile() async {
+    if (_pickingFile) return false; // منع النقر المزدوج
+    _pickingFile = true;
+    notifyListeners();
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -114,6 +121,9 @@ class AppViewModel extends ChangeNotifier {
       return true;
     } catch (_) {
       return false;
+    } finally {
+      _pickingFile = false;
+      notifyListeners();
     }
   }
 

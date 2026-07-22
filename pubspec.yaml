@@ -2,7 +2,7 @@ name: colab_desktop_runner
 description: "Colab Desktop Runner - واجهة آمنة لتشغيل سكربت سطح المكتب داخل Google Colab"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.9.2
@@ -33,10 +33,18 @@ dependencies:
   # مشاركة الملفات
   share_plus: 10.1.2
 
+  # نظام التحديث الآمن (مانيفست موقّع + تحديثات تفاضلية)
+  http: 1.5.0                # تنزيل المانيفست والرقع مع دعم Range/استئناف
+  cryptography: 2.7.0        # تحقق توقيع Ed25519 للمانيفست
+  archive: 3.6.1             # فك ضغط BZip2 لتطبيق رقع bsdiff
+  package_info_plus: 8.1.2   # قراءة versionCode المثبّت
+  path_provider: 2.1.5       # مجلد تنزيلات داخلي آمن
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  crypto: ^3.0.0   # حساب SHA-256 في اختبارات نظام التحديث
 
 flutter:
   uses-material-design: true

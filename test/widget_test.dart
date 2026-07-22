@@ -10,13 +10,16 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:colab_desktop_runner/core/constants.dart';
+import 'package:colab_desktop_runner/core/power_policy.dart';
 import 'package:colab_desktop_runner/core/url_validator.dart';
+import 'package:colab_desktop_runner/services/power_service.dart';
 import 'package:colab_desktop_runner/services/settings_service.dart';
 import 'package:colab_desktop_runner/viewmodels/app_viewmodel.dart';
 import 'package:colab_desktop_runner/screens/home_screen.dart';
 import 'package:colab_desktop_runner/screens/privacy_screen.dart';
 import 'package:colab_desktop_runner/screens/desktop_screen.dart';
 import 'package:colab_desktop_runner/screens/assistant_screen.dart';
+import 'package:colab_desktop_runner/screens/settings_screen.dart';
 
 Future<SettingsService> _makeSettings() async {
   SharedPreferences.setMockInitialValues({});
@@ -27,6 +30,7 @@ Widget _wrap(Widget child, SettingsService settings) {
   return MultiProvider(
     providers: [
       Provider<SettingsService>.value(value: settings),
+      ChangeNotifierProvider(create: (_) => PowerService(settings)),
       ChangeNotifierProvider(create: (_) => AppViewModel(settings)),
     ],
     child: MaterialApp(home: child),
@@ -294,6 +298,65 @@ void main() {
       await tester.pump();
       final vm = AppViewModel(s);
       expect(vm.assistantDone[0], true);
+    });
+  });
+
+  group('نظام توفير الطاقة - واجهة الإعدادات', () {
+    testWidgets('تعرض الأوضاع الخمسة ومؤشر الوضع الفعلي', (tester) async {
+      final s = await _makeSettings();
+      await tester.pumpWidget(_wrap(const SettingsScreen(), s));
+      await tester.pump();
+
+      expect(find.byKey(const Key('power_indicator')), findsOneWidget);
+      for (final key in [
+        'power_auto',
+        'power_balanced',
+        'power_strong',
+        'power_ultra',
+        'power_performance',
+      ]) {
+        await tester.scrollUntilVisible(
+          find.byKey(Key(key)),
+          150,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.byKey(Key(key)), findsOneWidget);
+      }
+    });
+
+    testWidgets('الافتراضي تلقائي/ذكي واختيار وضع آخر يُحفظ',
+        (tester) async {
+      final s = await _makeSettings();
+      expect(s.powerMode, 'auto'); // الافتراضي
+
+      await tester.pumpWidget(_wrap(const SettingsScreen(), s));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('power_ultra')),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.byKey(const Key('power_ultra')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('power_ultra')),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(s.powerMode, 'ultra'); // حُفظ في التخزين
+    });
+
+    testWidgets('اختيار "توفير فائق" يظهر تعطيل إبقاء الشاشة في المؤشر',
+        (tester) async {
+      final s = await _makeSettings();
+      await s.setPowerMode('ultra');
+      await tester.pumpWidget(_wrap(const SettingsScreen(), s));
+      await tester.pump();
+
+      // السياسة الفعلية: ultra يمنع إبقاء الشاشة
+      final ctx = tester.element(find.byType(SettingsScreen));
+      final power = ctx.read<PowerService>();
+      expect(power.policy.allowKeepScreenOn, false);
+      expect(power.policy.effectiveMode, PowerMode.ultra);
     });
   });
 }

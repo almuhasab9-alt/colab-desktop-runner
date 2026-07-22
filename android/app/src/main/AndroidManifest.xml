@@ -9,6 +9,8 @@
       لا يوجد QUERY_ALL_PACKAGES ولا AccessibilityService.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- طلب تثبيت التحديثات عبر نافذة النظام الرسمية فقط (بموافقة المستخدم) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:label="Colab Desktop Runner"
@@ -40,6 +42,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- FileProvider لمشاركة ملف APK المحدّث مع مُثبّت النظام فقط -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.colabdesktoprunner.runner.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_file_paths" />
+        </provider>
     </application>
 
     <queries>

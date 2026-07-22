@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/power_policy.dart';
+import '../services/power_service.dart';
 import '../services/settings_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import 'privacy_screen.dart';
+import 'updates_screen.dart';
 
 /// شاشة الإعدادات
 class SettingsScreen extends StatefulWidget {
@@ -116,6 +119,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 16),
 
+              // ---- توفير الطاقة ----
+              _sectionHeader(context, 'توفير الطاقة'),
+              _buildPowerSection(context),
+              const SizedBox(height: 16),
+
               // ---- المظهر ----
               _sectionHeader(context, 'المظهر'),
               Card(
@@ -214,6 +222,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 16),
 
+              // ---- التحديثات ----
+              _sectionHeader(context, 'التحديثات'),
+              Card(
+                child: ListTile(
+                  key: const Key('open_updates_button'),
+                  leading: const Icon(Icons.system_update_alt),
+                  title: const Text('فحص التحديثات'),
+                  subtitle: const Text(
+                      'تحديثات موقّعة رقميًا مع توفير البيانات (تحديث مصغّر)'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const UpdatesScreen()),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // ---- البيانات ----
               _sectionHeader(context, 'البيانات'),
               Card(
@@ -270,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'Colab Desktop Runner — الإصدار 1.0.0\n'
+                  'Colab Desktop Runner — الإصدار 1.1.0\n'
                   'بدون تحليلات • بدون إعلانات • بدون جمع بيانات',
                   textAlign: TextAlign.center,
                   style: Theme.of(context)
@@ -283,6 +308,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// قسم أوضاع توفير الطاقة الخمسة + مؤشر الوضع الفعلي.
+  Widget _buildPowerSection(BuildContext context) {
+    final power = context.watch<PowerService>();
+    final scheme = Theme.of(context).colorScheme;
+    final policy = power.policy;
+    final schedule = PowerPolicyEngine.backoffSchedule(policy);
+
+    const modes = [
+      (
+        PowerMode.auto,
+        'تلقائي (ذكي)',
+        'الافتراضي — يوازن تلقائيًا حسب البطارية والشحن وتوفير طاقة النظام'
+      ),
+      (
+        PowerMode.balanced,
+        'متوازن',
+        'سلوك ثابت متوسط بغض النظر عن حالة الجهاز'
+      ),
+      (
+        PowerMode.strong,
+        'توفير قوي',
+        'فواصل إعادة اتصال أطول ورسوم أقل — للاستخدام الطويل'
+      ),
+      (
+        PowerMode.ultra,
+        'توفير فائق',
+        'أقصى توفير — يعطّل إبقاء الشاشة مضاءة ويقلّل المحاولات للحد الأدنى'
+      ),
+      (
+        PowerMode.performance,
+        'أداء مرتفع',
+        'أفضل استجابة — استهلاك أعلى للبطارية (باختيارك الصريح)'
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // مؤشر الوضع الفعلي الحالي
+        Card(
+          key: const Key('power_indicator'),
+          color: scheme.primaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(Icons.bolt, color: scheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'الوضع الفعلي الآن: ${PowerPolicyEngine.modeLabelAr(policy.effectiveMode)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'إعادة الاتصال: ${schedule.join('، ')} ثانية'
+                        '${policy.allowKeepScreenOn ? '' : ' • إبقاء الشاشة معطّل'}',
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onPrimaryContainer),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'تحديث حالة الجهاز',
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => power.refreshNow(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Card(
+          child: Column(
+            children: [
+              for (final (mode, title, subtitle) in modes)
+                RadioListTile<PowerMode>(
+                  key: Key('power_${PowerPolicyEngine.modeKey(mode)}'),
+                  value: mode,
+                  groupValue: power.userMode,
+                  onChanged: (v) => power.setUserMode(v!),
+                  title: Text(title),
+                  subtitle: Text(subtitle),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
