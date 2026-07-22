@@ -50,8 +50,46 @@ class MainActivity : FlutterActivity() {
                 "getDeviceState" -> {
                     result.success(readDeviceState())
                 }
+                "getInstalledApkPath" -> {
+                    // مسار APK المثبّت الحالي — لقراءته وحساب SHA-256
+                    // قبل تطبيق الرقعة التفاضلية (bspatch).
+                    result.success(applicationInfo.sourceDir)
+                }
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    if (path == null) {
+                        result.success(false)
+                    } else {
+                        result.success(installApkWithPackageInstaller(path))
+                    }
+                }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    /**
+     * تثبيت APK محدّث عبر نافذة النظام الرسمية (ACTION_VIEW مع FileProvider).
+     * - المستخدم يوافق بنفسه في نافذة النظام.
+     * - أندرويد نفسه يتحقق من توقيع الشهادة (نفس الشهادة أو رفض)
+     *   ويمنع أي Downgrade على مستوى النظام.
+     */
+    private fun installApkWithPackageInstaller(path: String): Boolean {
+        return try {
+            val file = java.io.File(path)
+            if (!file.exists()) return false
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this, "$packageName.updates", file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 

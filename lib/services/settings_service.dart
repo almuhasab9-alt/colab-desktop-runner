@@ -120,6 +120,20 @@ class SettingsService {
   Future<void> setAssistantProgress(List<String> done) =>
       _prefs.setStringList(_kAssistantProgress, done);
 
+  // ---- نظام التحديث ----
+  static const _kLastUpdateSerial = 'last_update_serial';
+  static const _kUpdateWifiOnly = 'update_wifi_only';
+
+  /// آخر رقم تسلسلي معروف لبيان التحديث — منع هجمات Replay.
+  int get lastUpdateSerial => _prefs.getInt(_kLastUpdateSerial) ?? 0;
+  Future<void> setLastUpdateSerial(int v) =>
+      _prefs.setInt(_kLastUpdateSerial, v);
+
+  /// تنزيل التحديثات عبر Wi-Fi فقط (افتراضي: مفعّل لتوفير البيانات).
+  bool get updateWifiOnly => _prefs.getBool(_kUpdateWifiOnly) ?? true;
+  Future<void> setUpdateWifiOnly(bool v) =>
+      _prefs.setBool(_kUpdateWifiOnly, v);
+
   // ---- وضع توفير الطاقة ----
   /// الافتراضي: 'auto' (تلقائي/ذكي)
   String get powerMode => _prefs.getString(_kPowerMode) ?? 'auto';

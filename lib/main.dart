@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'services/power_service.dart';
 import 'services/settings_service.dart';
+import 'services/update_service.dart';
 import 'viewmodels/app_viewmodel.dart';
 import 'screens/home_screen.dart';
 import 'screens/privacy_screen.dart';
@@ -25,6 +26,7 @@ class ColabDesktopRunnerApp extends StatelessWidget {
       providers: [
         Provider<SettingsService>.value(value: settings),
         ChangeNotifierProvider(create: (_) => PowerService(settings)),
+        ChangeNotifierProvider(create: (_) => UpdateService(settings)),
         ChangeNotifierProvider(create: (_) => AppViewModel(settings)),
       ],
       child: Consumer<AppViewModel>(

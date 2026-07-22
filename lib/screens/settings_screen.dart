@@ -8,6 +8,7 @@ import '../services/power_service.dart';
 import '../services/settings_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import 'privacy_screen.dart';
+import 'updates_screen.dart';
 
 /// شاشة الإعدادات
 class SettingsScreen extends StatefulWidget {
@@ -217,6 +218,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle: const Text('حركة مطابقة لإصبعك 1:1'),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ---- التحديثات ----
+              _sectionHeader(context, 'التحديثات'),
+              Card(
+                child: ListTile(
+                  key: const Key('open_updates_button'),
+                  leading: const Icon(Icons.system_update_alt),
+                  title: const Text('فحص التحديثات'),
+                  subtitle: const Text(
+                      'تحديثات موقّعة رقميًا مع توفير البيانات (تحديث مصغّر)'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const UpdatesScreen()),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
