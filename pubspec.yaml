@@ -2,7 +2,7 @@ name: colab_desktop_runner
 description: "Colab Desktop Runner - واجهة آمنة لتشغيل سكربت سطح المكتب داخل Google Colab"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.9.2

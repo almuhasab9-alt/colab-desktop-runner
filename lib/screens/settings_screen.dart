@@ -295,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'Colab Desktop Runner — الإصدار 1.0.0\n'
+                  'Colab Desktop Runner — الإصدار 1.1.0\n'
                   'بدون تحليلات • بدون إعلانات • بدون جمع بيانات',
                   textAlign: TextAlign.center,
                   style: Theme.of(context)
