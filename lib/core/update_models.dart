@@ -64,6 +64,9 @@ class UpdateManifest {
   final List<PatchArtifact> patches;
   final String notesAr;
 
+  /// معرّف مفتاح التوقيع (لخطة تدوير المفاتيح) — اختياري للتوافق الخلفي.
+  final String? keyId;
+
   const UpdateManifest({
     required this.packageName,
     required this.serial,
@@ -76,6 +79,7 @@ class UpdateManifest {
     required this.fullApk,
     required this.patches,
     required this.notesAr,
+    this.keyId,
   });
 
   factory UpdateManifest.fromJsonBytes(List<int> bytes) {
@@ -101,6 +105,7 @@ class UpdateManifest {
           PatchArtifact.fromJson(p as Map<String, dynamic>)
       ],
       notesAr: latest['notesAr'] as String? ?? '',
+      keyId: j['keyId'] as String?,
     );
   }
 

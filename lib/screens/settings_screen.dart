@@ -374,6 +374,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: TextStyle(
                             fontSize: 12, color: scheme.onPrimaryContainer),
                       ),
+                      // سبب القرار الفعلي (للوضع التلقائي فقط)
+                      if (power.userMode == PowerMode.auto) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'السبب: ${power.autoReasonAr}',
+                          key: const Key('power_auto_reason'),
+                          style: TextStyle(
+                              fontSize: 12, color: scheme.onPrimaryContainer),
+                        ),
+                      ],
                     ],
                   ),
                 ),

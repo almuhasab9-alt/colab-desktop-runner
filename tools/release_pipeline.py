@@ -46,6 +46,8 @@ PACKAGE_NAME = "com.colabdesktoprunner.runner"
 # APK signing certificate SHA-256 (public fingerprint, safe to embed)
 SIGNING_CERT_SHA256 = "4582a8a121e45c76c590596a2479d8510157734e8c64617ac54b3e9de3a8551a"
 MANIFEST_VALID_DAYS = 90
+# Key rotation identifier - must match UpdateConfig.manifestKeyId in the app
+MANIFEST_KEY_ID = "ed25519-2025-01"
 
 
 def sha256_file(path: str) -> str:
@@ -131,6 +133,7 @@ def main() -> int:
 
     manifest = {
         "packageName": PACKAGE_NAME,
+        "keyId": MANIFEST_KEY_ID,
         "serial": args.serial,
         "channel": args.channel,
         "expiresAt": (datetime.now(timezone.utc)
@@ -151,8 +154,12 @@ def main() -> int:
         "patches": patches,
     }
 
+    # Deterministic JSON serialization (sorted keys, fixed separators).
+    # The Ed25519 signature covers these exact bytes - the app verifies
+    # the downloaded bytes directly, no re-serialization on the client.
     manifest_bytes = json.dumps(
-        manifest, ensure_ascii=False, indent=2).encode("utf-8")
+        manifest, ensure_ascii=False, indent=2, sort_keys=True
+    ).encode("utf-8")
     manifest_path = os.path.join(args.out, "latest.json")
     open(manifest_path, "wb").write(manifest_bytes)
 

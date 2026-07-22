@@ -1,15 +1,21 @@
 package com.colabdesktoprunner.runner
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 /**
@@ -28,9 +34,33 @@ import io.flutter.plugin.common.MethodChannel
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "com.almuhasab.colabdesktoprunner/native"
+    private val eventsName = "com.almuhasab.colabdesktoprunner/device_events"
+
+    // مستمعو أحداث النظام — تُسجّل مرة واحدة وتُلغى عند الإغلاق (لا تسريب).
+    private var batteryReceiver: BroadcastReceiver? = null
+    private var powerSaveReceiver: BroadcastReceiver? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var eventSink: EventChannel.EventSink? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // قناة أحداث حالة الجهاز (بث فوري عند التغيّر — بدون polling)
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            eventsName
+        ).setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(args: Any?, sink: EventChannel.EventSink?) {
+                eventSink = sink
+                registerSystemListeners()
+            }
+
+            override fun onCancel(args: Any?) {
+                unregisterSystemListeners()
+                eventSink = null
+            }
+        })
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName
@@ -66,6 +96,69 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /** إرسال حالة الجهاز الحالية لـ Flutter عبر قناة الأحداث (على الخيط الرئيسي). */
+    private fun emitDeviceState() {
+        val sink = eventSink ?: return
+        val state = readDeviceState()
+        mainHandler.post { sink.success(state) }
+    }
+
+    private fun registerSystemListeners() {
+        if (batteryReceiver != null) return // مسجّلة مسبقًا — لا تكرار
+        // تغيّر البطارية/الشحن (sticky broadcast — بلا أذونات)
+        batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) = emitDeviceState()
+        }
+        registerReceiver(batteryReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_LOW)
+            addAction(Intent.ACTION_BATTERY_OKAY)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        })
+        // تغيّر وضع توفير طاقة النظام
+        powerSaveReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) = emitDeviceState()
+        }
+        registerReceiver(
+            powerSaveReceiver,
+            IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        )
+        // تغيّر الشبكة (محدودة/غير محدودة) عبر NetworkCallback
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = emitDeviceState()
+                override fun onLost(network: Network) = emitDeviceState()
+                override fun onCapabilitiesChanged(
+                    network: Network, caps: NetworkCapabilities
+                ) = emitDeviceState()
+            }
+            cm.registerDefaultNetworkCallback(networkCallback!!)
+        } catch (_: Exception) { /* بدون مراقبة شبكة — يبقى refreshNow متاحًا */ }
+        // حالة أولية فورية
+        emitDeviceState()
+    }
+
+    private fun unregisterSystemListeners() {
+        try { batteryReceiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
+        try { powerSaveReceiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
+        try {
+            networkCallback?.let {
+                (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                    .unregisterNetworkCallback(it)
+            }
+        } catch (_: Exception) {}
+        batteryReceiver = null
+        powerSaveReceiver = null
+        networkCallback = null
+    }
+
+    override fun onDestroy() {
+        unregisterSystemListeners()
+        eventSink = null
+        super.onDestroy()
     }
 
     /**
@@ -131,11 +224,21 @@ class MainActivity : FlutterActivity() {
                 !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
         } catch (_: Exception) { /* قيم افتراضية آمنة */ }
 
+        // حالة الحرارة (Android 10+) — 0=NONE .. 6=SHUTDOWN، -1 عند عدم الدعم
+        var thermal = -1
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                thermal = pm.currentThermalStatus
+            }
+        } catch (_: Exception) { /* قيم افتراضية آمنة */ }
+
         return mapOf(
             "batteryLevel" to level,
             "isCharging" to charging,
             "systemPowerSave" to powerSave,
-            "isMeteredNetwork" to metered
+            "isMeteredNetwork" to metered,
+            "thermalStatus" to thermal
         )
     }
 }

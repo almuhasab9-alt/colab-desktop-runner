@@ -35,6 +35,26 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
     }
   }
 
+  /// وصف التحديث المتاح: الحجم الكامل + حجم الرقعة ونسبة التوفير إن وُجدت.
+  String? _availableSubtitle(UpdateService updates) {
+    final m = updates.manifest;
+    if (m == null) return null;
+    final parts = <String>[];
+    if (m.notesAr.isNotEmpty) parts.add(m.notesAr);
+    final full = _savedDataLabel(m.fullApk.size);
+    if (m.patches.isNotEmpty) {
+      final p = m.patches.first;
+      final pct = m.fullApk.size > 0
+          ? (100 - p.size * 100 / m.fullApk.size).toStringAsFixed(1)
+          : '—';
+      parts.add('الحجم الكامل: $full • الرقعة: ${_savedDataLabel(p.size)} '
+          '(توفير حتى $pct٪ إن توفرت رقعة مطابقة)');
+    } else {
+      parts.add('حجم التنزيل: $full');
+    }
+    return parts.join('\n');
+  }
+
   String _savedDataLabel(int bytes) {
     if (bytes <= 0) return '';
     if (bytes < 1024 * 1024) {
@@ -153,9 +173,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
           Icons.new_releases,
           scheme.primary,
           'يتوفر تحديث جديد: ${updates.manifest?.versionName ?? ''}',
-          updates.manifest?.notesAr.isNotEmpty == true
-              ? updates.manifest!.notesAr
-              : null,
+          _availableSubtitle(updates),
         ),
       UpdatePhase.downloadingPatch => (
           Icons.download,
@@ -173,7 +191,9 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
           Icons.download,
           scheme.primary,
           'جارٍ تنزيل التحديث الكامل...',
-          '${(updates.progress * 100).toStringAsFixed(0)}%',
+          updates.fallbackReasonAr != null
+              ? '${updates.fallbackReasonAr} • ${(updates.progress * 100).toStringAsFixed(0)}%'
+              : '${(updates.progress * 100).toStringAsFixed(0)}%',
         ),
       UpdatePhase.verifying => (
           Icons.fact_check_outlined,
@@ -185,9 +205,12 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
           Icons.install_mobile,
           Colors.green,
           'التحديث جاهز للتثبيت',
-          updates.bytesSaved > 0
-              ? 'وفّرت ${_savedDataLabel(updates.bytesSaved)} من البيانات بفضل التحديث المصغّر'
-              : null,
+          // لا ندّعي التوفير إلا إذا استُخدمت الرقعة فعليًا
+          updates.usedDelta && updates.bytesSaved > 0
+              ? 'تحديث مصغّر: وفّرت ${_savedDataLabel(updates.bytesSaved)} من البيانات'
+              : updates.fallbackReasonAr != null
+                  ? 'تم تنزيل التطبيق الكامل — ${updates.fallbackReasonAr}'
+                  : null,
         ),
       UpdatePhase.failed => (
           Icons.error_outline,

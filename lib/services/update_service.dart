@@ -73,6 +73,18 @@ class UpdateService extends ChangeNotifier {
   /// البيانات الموفَّرة بمسار الرقعة مقارنة بالتنزيل الكامل.
   int get bytesSaved => _bytesSaved;
 
+  /// هل تم التحديث فعليًا برقعة مصغّرة؟ (لا ندّعي التوفير إذا نُزّل الكامل)
+  bool _usedDelta = false;
+  bool get usedDelta => _usedDelta;
+
+  /// سبب التراجع للمسار الكامل (رسالة مفهومة للمستخدم).
+  String? _fallbackReasonAr;
+  String? get fallbackReasonAr => _fallbackReasonAr;
+
+  /// مدة تطبيق آخر رقعة (للقياسات).
+  Duration? _lastPatchDuration;
+  Duration? get lastPatchDuration => _lastPatchDuration;
+
   String? _readyApkPath;
   String? get readyApkPath => _readyApkPath;
 
@@ -111,6 +123,12 @@ class UpdateService extends ChangeNotifier {
       }
 
       final m = UpdateManifest.fromJsonBytes(manifestBytes);
+      // تدوير المفاتيح: بيان بـ keyId مختلف يُرفض (لا مفتاح جديد من الشبكة).
+      if (m.keyId != null && m.keyId != UpdateConfig.manifestKeyId) {
+        _setPhase(UpdatePhase.failed,
+            error: 'مفتاح توقيع البيان غير معروف — حدّث التطبيق من المصدر الرسمي.');
+        return UpdateCheckOutcome(errorAr: _errorAr);
+      }
       final info = await PackageInfo.fromPlatform();
       final installedCode = int.tryParse(info.buildNumber) ?? 0;
 
@@ -172,37 +190,52 @@ class UpdateService extends ChangeNotifier {
     }
 
     _bytesSaved = 0;
+    _usedDelta = false;
+    _fallbackReasonAr = null;
 
     // --- مسار الرقعة التفاضلية ---
     try {
-      final installedApk = await _readInstalledApk();
-      if (installedApk != null) {
-        final installedSha = await _sha256Hex(installedApk);
+      final installedPath = await _installedApkPath();
+      if (installedPath == null) {
+        _fallbackReasonAr = 'تعذّر الوصول لملف التطبيق المثبّت.';
+      } else {
+        // SHA-256 تدفقي من القرص — لا نحمّل الـ APK المثبّت في الذاكرة.
+        final installedSha = await _sha256HexOfFile(installedPath);
         final info = await PackageInfo.fromPlatform();
         final installedCode = int.tryParse(info.buildNumber) ?? 0;
 
-        if (ManifestValidator.deltaAllowed(m, installedCode)) {
+        if (!ManifestValidator.deltaAllowed(m, installedCode)) {
+          _fallbackReasonAr = 'إصدارك الحالي أقدم من أن تدعمه الرقعة المصغّرة.';
+        } else {
           final patch = m.patchFor(installedCode, installedSha);
-          if (patch != null && patch.size <= UpdateConfig.maxPatchBytes) {
-            final ok = await _applyDeltaPath(m, patch, installedApk);
+          if (patch == null) {
+            _fallbackReasonAr =
+                'لا توجد رقعة مطابقة لنسختك المثبّتة (بصمة مختلفة).';
+          } else if (patch.size > UpdateConfig.maxPatchBytes) {
+            _fallbackReasonAr = 'حجم الرقعة يتجاوز الحد المسموح.';
+          } else {
+            final ok = await _applyDeltaPath(m, patch, installedPath);
             if (ok) {
               _bytesSaved = m.fullApk.size - patch.size;
+              _usedDelta = true;
               return true;
             }
-            // فشل مسار الرقعة → متابعة للمسار الكامل (Fallback)
+            _fallbackReasonAr ??=
+                'فشل تطبيق/تحقق الرقعة — سيتم تنزيل التطبيق الكامل.';
           }
         }
       }
     } catch (_) {
-      // أي فشل في مسار الرقعة لا يوقف التحديث — Fallback للكامل.
+      _fallbackReasonAr ??= 'خطأ غير متوقع في مسار الرقعة.';
     }
 
-    // --- مسار APK الكامل ---
+    // --- مسار APK الكامل (Fallback) ---
+    notifyListeners();
     return _fullApkPath(m);
   }
 
   Future<bool> _applyDeltaPath(
-      UpdateManifest m, PatchArtifact patch, Uint8List installedApk) async {
+      UpdateManifest m, PatchArtifact patch, String installedPath) async {
     _setPhase(UpdatePhase.downloadingPatch);
     final patchBytes = await _downloadResumable(
       patch.url,
@@ -210,37 +243,57 @@ class UpdateService extends ChangeNotifier {
       maxBytes: UpdateConfig.maxPatchBytes,
       cacheName: 'patch_${patch.fromVersionCode}_to_${m.versionCode}.bin',
     );
-    if (patchBytes == null) return false;
+    if (patchBytes == null) {
+      _fallbackReasonAr = 'فشل تنزيل الرقعة.';
+      return false;
+    }
 
     // تحقق SHA-256 للرقعة
     if (await _sha256Hex(patchBytes) != patch.patchSha256) {
+      _fallbackReasonAr = 'بصمة الرقعة غير مطابقة — تم رفضها.';
       return false;
     }
 
     _setPhase(UpdatePhase.applyingPatch);
-    Uint8List rebuilt;
+    final dir = await getApplicationSupportDirectory();
+    final outPath = '${dir.path}/updates/update_v${m.versionCode}.apk';
+    final sw = Stopwatch()..start();
     try {
-      // تطبيق الرقعة في Isolate منفصل (لا يجمّد الواجهة)
-      rebuilt = await compute(_applyPatchIsolate, <String, Uint8List>{
-        'old': installedApk,
+      // تطبيق الرقعة ملفًا-إلى-ملف في Isolate (ذاكرة أقل، لا تجميد)
+      await compute(_applyPatchToFileIsolate, <String, dynamic>{
+        'oldPath': installedPath,
         'patch': patchBytes,
-      });
+        'outPath': outPath,
+        'maxNewSize': UpdateConfig.maxApkBytes,
+      }).timeout(UpdateConfig.patchTimeout);
     } catch (_) {
+      await _deleteIfExists(outPath);
+      _fallbackReasonAr = 'فشل تطبيق الرقعة على الإصدار المثبّت.';
       return false;
     }
+    _lastPatchDuration = sw.elapsed;
 
-    // التحقق النهائي: SHA-256 للـ APK المُعاد بناؤه = المتوقع في المانيفست
+    // التحقق النهائي: SHA-256 والحجم للـ APK المُعاد بناؤه
     _setPhase(UpdatePhase.verifying);
-    if (await _sha256Hex(rebuilt) != m.fullApk.sha256) {
+    final rebuiltLen = await File(outPath).length();
+    if (rebuiltLen != m.fullApk.size ||
+        await _sha256HexOfFile(outPath) != m.fullApk.sha256) {
+      // لا يجوز بقاء APK جزئي/خاطئ قابل للتثبيت بعد الفشل.
+      await _deleteIfExists(outPath);
+      _fallbackReasonAr = 'الناتج بعد الترقيع غير مطابق للبصمة المتوقعة.';
       return false;
     }
-    if (rebuilt.length != m.fullApk.size) return false;
 
-    final path = await _saveApk(rebuilt, 'update_v${m.versionCode}.apk');
-    if (path == null) return false;
-    _readyApkPath = path;
+    _readyApkPath = outPath;
     _setPhase(UpdatePhase.readyToInstall);
     return true;
+  }
+
+  Future<void> _deleteIfExists(String path) async {
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
   }
 
   Future<bool> _fullApkPath(UpdateManifest m) async {
@@ -291,8 +344,14 @@ class UpdateService extends ChangeNotifier {
   // ---------------------------------------------------------------
   // أدوات داخلية
   // ---------------------------------------------------------------
-  static Uint8List _applyPatchIsolate(Map<String, Uint8List> args) {
-    return BsPatch.apply(args['old']!, args['patch']!);
+  static Future<void> _applyPatchToFileIsolate(
+      Map<String, dynamic> args) async {
+    await BsPatch.applyToFile(
+      oldPath: args['oldPath'] as String,
+      patch: args['patch'] as Uint8List,
+      outPath: args['outPath'] as String,
+      maxNewSize: args['maxNewSize'] as int,
+    );
   }
 
   Future<bool> _verifyEd25519(List<int> message, List<int> sigBytes) async {
@@ -335,18 +394,28 @@ class UpdateService extends ChangeNotifier {
     return hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  /// قراءة APK المثبّت الحالي من applicationInfo.sourceDir عبر القناة الأصلية.
-  Future<Uint8List?> _readInstalledApk() async {
+  /// مسار APK المثبّت الحالي من applicationInfo.sourceDir عبر القناة الأصلية.
+  Future<String?> _installedApkPath() async {
     try {
       final path =
           await _channel.invokeMethod<String>('getInstalledApkPath');
       if (path == null) return null;
-      final f = File(path);
-      if (!await f.exists()) return null;
-      return await f.readAsBytes();
+      if (!await File(path).exists()) return null;
+      return path;
     } catch (_) {
       return null;
     }
+  }
+
+  /// SHA-256 تدفقي لملف على القرص (لا يحمّله كاملًا في الذاكرة).
+  Future<String> _sha256HexOfFile(String path) async {
+    final sink = crypto.Sha256().newHashSink();
+    await for (final chunk in File(path).openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
+    final hash = await sink.hash();
+    return hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
   Future<bool> _isMeteredNetwork() async {

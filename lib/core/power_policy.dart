@@ -38,12 +38,17 @@ class DeviceStateSnapshot {
   /// هل التطبيق في الخلفية؟
   final bool isBackground;
 
+  /// حالة حرارة الجهاز (PowerManager.THERMAL_STATUS_*):
+  /// -1 غير مدعومة، 0 طبيعية .. 3 شديدة (SEVERE) فأعلى = حرجة.
+  final int thermalStatus;
+
   const DeviceStateSnapshot({
     this.batteryLevel,
     this.isCharging = false,
     this.systemPowerSave = false,
     this.isMeteredNetwork = false,
     this.isBackground = false,
+    this.thermalStatus = -1,
   });
 }
 
@@ -143,17 +148,38 @@ class PowerPolicyEngine {
   /// - بطارية ≤ 30% أو شبكة محدودة → توفير قوي.
   /// - غير ذلك → متوازن.
   static PowerMode resolveAuto(DeviceStateSnapshot s) {
+    // حرارة شديدة (SEVERE=3 فأعلى) → توفير فائق فورًا (أولوية سلامة)
+    if (s.thermalStatus >= 3) return PowerMode.ultra;
     if (s.systemPowerSave || (s.batteryLevel != null && s.batteryLevel! <= 15)) {
       return PowerMode.ultra;
     }
     if ((s.batteryLevel != null && s.batteryLevel! <= 30) ||
-        s.isMeteredNetwork) {
+        s.isMeteredNetwork ||
+        s.thermalStatus == 2) {
       return PowerMode.strong;
     }
     if (s.isCharging && (s.batteryLevel == null || s.batteryLevel! >= 50)) {
       return PowerMode.performance;
     }
     return PowerMode.balanced;
+  }
+
+  /// سبب القرار الفعلي للوضع التلقائي — رسالة مفهومة للمستخدم.
+  static String autoReasonAr(DeviceStateSnapshot s) {
+    if (s.thermalStatus >= 3) return 'حرارة الجهاز مرتفعة';
+    if (s.systemPowerSave) return 'وضع توفير طاقة النظام مفعّل';
+    if (s.batteryLevel != null && s.batteryLevel! <= 15) {
+      return 'بطارية منخفضة جدًا (${s.batteryLevel}%)';
+    }
+    if (s.batteryLevel != null && s.batteryLevel! <= 30) {
+      return 'بطارية منخفضة (${s.batteryLevel}%)';
+    }
+    if (s.isMeteredNetwork) return 'شبكة بيانات محدودة';
+    if (s.thermalStatus == 2) return 'حرارة الجهاز متوسطة';
+    if (s.isCharging && (s.batteryLevel == null || s.batteryLevel! >= 50)) {
+      return 'الجهاز قيد الشحن';
+    }
+    return 'حالة الجهاز طبيعية';
   }
 
   /// حساب السياسة الفعلية.

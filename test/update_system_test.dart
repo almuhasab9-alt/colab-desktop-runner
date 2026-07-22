@@ -48,6 +48,7 @@ UpdateManifest _manifest({
 }
 
 void main() {
+  _applyToFileTests();
   group('BsPatch - تطبيق رقعة BSDIFF40 حقيقية', () {
     test('إعادة بناء الملف الجديد بايت-ببايت من الرقعة', () {
       final old = _read('old.bin');
@@ -230,6 +231,69 @@ void main() {
         },
       ]);
       expect(m.patchFor(2, 'aa' * 32), isNull);
+    });
+  });
+}
+
+// اختبارات النسخة التدفقية applyToFile (ملف-إلى-ملف، ذاكرة أقل)
+void _applyToFileTests() {
+  group('BsPatch.applyToFile - النسخة التدفقية', () {
+    late Directory tmp;
+    setUp(() async {
+      tmp = await Directory.systemTemp.createTemp('bspatch_test');
+    });
+    tearDown(() async {
+      if (await tmp.exists()) await tmp.delete(recursive: true);
+    });
+
+    test('يعيد إنتاج الملف الجديد بايتًا ببايت من القرص', () async {
+      final old = File('test/fixtures/old.bin').readAsBytesSync();
+      final patch = File('test/fixtures/patch.bsdiff').readAsBytesSync();
+      final expected = File('test/fixtures/new.bin').readAsBytesSync();
+
+      final oldPath = '${tmp.path}/old.bin';
+      final outPath = '${tmp.path}/out.bin';
+      File(oldPath).writeAsBytesSync(old);
+
+      await BsPatch.applyToFile(
+          oldPath: oldPath, patch: patch, outPath: outPath);
+      final rebuilt = File(outPath).readAsBytesSync();
+      expect(rebuilt.length, expected.length);
+      expect(rebuilt, equals(expected));
+    });
+
+    test('يحذف الملف المؤقت عند رقعة تالفة ولا يترك ناتجًا جزئيًا', () async {
+      final old = File('test/fixtures/old.bin').readAsBytesSync();
+      final patch = File('test/fixtures/patch.bsdiff').readAsBytesSync();
+      final corrupted = Uint8List.fromList(patch);
+      corrupted[50] ^= 0xFF; // إتلاف كتلة التحكم المضغوطة
+
+      final oldPath = '${tmp.path}/old.bin';
+      final outPath = '${tmp.path}/out.bin';
+      File(oldPath).writeAsBytesSync(old);
+
+      await expectLater(
+        BsPatch.applyToFile(
+            oldPath: oldPath, patch: corrupted, outPath: outPath),
+        throwsA(anything),
+      );
+      expect(File(outPath).existsSync(), isFalse,
+          reason: 'يجب حذف الناتج الجزئي بعد الفشل');
+    });
+
+    test('يرفض ناتجًا يتجاوز الحد الأقصى المسموح', () async {
+      final old = File('test/fixtures/old.bin').readAsBytesSync();
+      final patch = File('test/fixtures/patch.bsdiff').readAsBytesSync();
+      final oldPath = '${tmp.path}/old.bin';
+      File(oldPath).writeAsBytesSync(old);
+      await expectLater(
+        BsPatch.applyToFile(
+            oldPath: oldPath,
+            patch: patch,
+            outPath: '${tmp.path}/out.bin',
+            maxNewSize: 10), // أصغر من حجم الناتج الفعلي
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 }

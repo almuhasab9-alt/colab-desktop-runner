@@ -1,3 +1,4 @@
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -18,23 +19,61 @@ import 'settings_service.dart';
 class PowerService extends ChangeNotifier with WidgetsBindingObserver {
   static const _channel =
       MethodChannel('com.almuhasab.colabdesktoprunner/native');
+  static const _eventsChannel =
+      EventChannel('com.almuhasab.colabdesktoprunner/device_events');
 
   final SettingsService _settings;
   DeviceStateSnapshot _deviceState = const DeviceStateSnapshot();
   PowerPolicy _policy;
   bool _isBackground = false;
+  StreamSubscription<dynamic>? _eventsSub;
+  Timer? _debounce;
 
-  /// لا مؤقتات دورية إطلاقًا — تحديث الحالة يتم فقط:
-  /// عند الإنشاء، عند العودة للمقدمة، وعند طلب المستخدم (refreshNow).
-  /// هذا بحد ذاته جزء من توفير الطاقة (لا عمل دوري في الخلفية).
+  /// بلا polling إطلاقًا — التحديث يتم عبر:
+  /// 1) أحداث النظام الفورية (بطارية/شحن/توفير طاقة/شبكة/حرارة)
+  ///    من Kotlin عبر EventChannel مع debounce 500ms.
+  /// 2) الإنشاء والعودة للمقدمة وrefreshNow.
   PowerService(this._settings)
       : _policy = PowerPolicyEngine.compute(
           PowerPolicyEngine.parseMode(_settings.powerMode),
           const DeviceStateSnapshot(),
         ) {
     WidgetsBinding.instance.addObserver(this);
+    _listenToSystemEvents();
     refreshNow();
   }
+
+  void _listenToSystemEvents() {
+    if (kIsWeb) return;
+    // اشتراك واحد فقط طوال عمر الخدمة — لا listeners مكررة.
+    _eventsSub ??= _eventsChannel.receiveBroadcastStream().listen(
+      (event) {
+        if (event is! Map) return;
+        // debounce: أحداث الشبكة/البطارية قد تتدفق متتالية.
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 500), () {
+          _deviceState = _parseState(Map<dynamic, dynamic>.from(event));
+          _recompute();
+        });
+      },
+      onError: (_) {}, // فشل القناة لا يكسر النظام
+    );
+  }
+
+  DeviceStateSnapshot _parseState(Map<dynamic, dynamic> res) {
+    final level = res['batteryLevel'] as int? ?? -1;
+    return DeviceStateSnapshot(
+      batteryLevel: level >= 0 ? level : null,
+      isCharging: res['isCharging'] as bool? ?? false,
+      systemPowerSave: res['systemPowerSave'] as bool? ?? false,
+      isMeteredNetwork: res['isMeteredNetwork'] as bool? ?? false,
+      thermalStatus: res['thermalStatus'] as int? ?? -1,
+      isBackground: _isBackground,
+    );
+  }
+
+  /// سبب القرار الحالي (للوضع التلقائي) — يُعرض في الواجهة.
+  String get autoReasonAr => PowerPolicyEngine.autoReasonAr(_deviceState);
 
   /// السياسة الفعلية الحالية.
   PowerPolicy get policy => _policy;
@@ -65,6 +104,7 @@ class PowerService extends ChangeNotifier with WidgetsBindingObserver {
       isCharging: _deviceState.isCharging,
       systemPowerSave: _deviceState.systemPowerSave,
       isMeteredNetwork: _deviceState.isMeteredNetwork,
+      thermalStatus: _deviceState.thermalStatus,
       isBackground: _isBackground,
     );
     _policy = PowerPolicyEngine.compute(userMode, snapshot);
@@ -77,14 +117,7 @@ class PowerService extends ChangeNotifier with WidgetsBindingObserver {
       final res =
           await _channel.invokeMapMethod<String, dynamic>('getDeviceState');
       if (res == null) return const DeviceStateSnapshot();
-      final level = res['batteryLevel'] as int? ?? -1;
-      return DeviceStateSnapshot(
-        batteryLevel: level >= 0 ? level : null,
-        isCharging: res['isCharging'] as bool? ?? false,
-        systemPowerSave: res['systemPowerSave'] as bool? ?? false,
-        isMeteredNetwork: res['isMeteredNetwork'] as bool? ?? false,
-        isBackground: _isBackground,
-      );
+      return _parseState(res);
     } catch (_) {
       // فشل الجسر الأصلي لا يكسر النظام — قيم افتراضية آمنة.
       return const DeviceStateSnapshot();
@@ -108,6 +141,9 @@ class PowerService extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _eventsSub?.cancel();
+    _eventsSub = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
