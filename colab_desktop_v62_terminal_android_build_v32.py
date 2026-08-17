@@ -9139,9 +9139,13 @@ def _http_post_json(url, body, timeout):
         try:
             if conn is None:
                 u = urlparse(url)
-                conn = http.client.HTTPSConnection(
-                    u.hostname, u.port or 443, timeout=timeout,
-                    context=ssl.create_default_context())
+                if u.scheme == "https":
+                    conn = http.client.HTTPSConnection(
+                        u.hostname, u.port or 443, timeout=timeout,
+                        context=ssl.create_default_context())
+                else:
+                    conn = http.client.HTTPConnection(
+                        u.hostname, u.port or 80, timeout=timeout)
                 _HTTPC[key] = conn
             conn.request("POST", urlparse(url).path or "/", payload, headers)
             resp = conn.getresponse()
