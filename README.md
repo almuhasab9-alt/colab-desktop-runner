@@ -1,62 +1,43 @@
 # colab-desktop-runner
 
-مشروع تشغيل سطح مكتب لينكس على Google Colab مع وصول MCP عبر Cloudflare، وحفظ الحالة في Google Drive، وتشغيل Chrome و GenSpark و Cursor و Antigravity IDE و Android Studio.
+مشروع تشغيل سطح مكتب لينكس على Google Colab مع وصول MCP، وحفظ الحالة في Drive، ووكيل Qwen3.8-Max للبرمجة والبناء عبر الترمنل.
 
-> الملف الحالي الرئيسي: `colab_desktop_v61_qwen_bridge_robust_v31.py`
+> الملف الحالي: `colab_desktop_v62_terminal_android_build_v32.py`
 
-## الإصدار الحالي
+## الإصدار الحالي V32 / v62
 
-**V31 / v61** — جسر Qwen3.8-Max مقاوم لتغيّر الواجهة، يعمل مع Qwen Chat و Qwen Studio.
+- جسر Qwen3.8-Max v3 (إرسال بزر Send، اكتشاف CDP ديناميكي، استخراج نظيف للجواب).
+- الوكيل **يبني تطبيقات أندرويد عبر الترمنل وGradle/SDK فقط** — أُزيل ارتباط بناء APK بواجهة Android Studio.
+- تحقق إلزامي من الـAPK (aapt/unzip) ونسخه إلى سطح المكتب.
+- يُرفق سكربت جاهز: `build_photo_editor.sh` (تطبيق «معدل الصور»).
 
-### تحقق مباشر على الجلسة الحية (2026-08-17)
-
-- جسر Qwen v3 شغّال على `127.0.0.1:8790`.
-- منفذ CDP لـChrome مكتشَف ديناميكيًا (`9224`).
-- اختبار فعلي: سؤال «ما عاصمة فرنسا؟» عاد الجواب الصحيح `باريس` عبر الجسر.
-- `python3 -m py_compile`: ناجح.
-
-التفاصيل في:
-- [`reports/REPORT_V31_QWEN_BRIDGE_ROBUST.md`](reports/REPORT_V31_QWEN_BRIDGE_ROBUST.md)
-- [`reports/PROJECT_HISTORY_V15_TO_V31.md`](reports/PROJECT_HISTORY_V15_TO_V31.md)
-
-## طريقة الاستخدام في Colab
-
-ارفع الملف التالي إلى جلسة Colab:
-
-- `colab_desktop_v61_qwen_bridge_robust_v31.py`
-
-ثم شغّله في خلية Colab:
+## الاستخدام في Colab
 
 ```python
 from google.colab import drive
 drive.mount('/content/drive')
-
-path = "/content/colab_desktop_v61_qwen_bridge_robust_v31.py"
+path = "/content/colab_desktop_v62_terminal_android_build_v32.py"
 %run -i "{path}"
 ```
 
-عند اكتمال الإقلاع سيظهر رابط سطح المكتب / MCP داخل مخرجات الخلية.
+## بناء تطبيق معدل الصور (اختبار)
+
+بعد الإقلاع، في ترمنل نظيف:
+```bash
+bash build_photo_editor.sh
+```
+سيُنشئ المشروع في `/root/agent-workspaces/qwen/photo-editor` وينسخ APK إلى `/root/Desktop/photo-editor.apk`.
 
 ## المحتويات
 
 ```text
-colab_desktop_v61_qwen_bridge_robust_v31.py   # الكود الحديث الرئيسي
-reports/                                       # تقارير المهام والإصلاحات
-patches/                                       # ملفات patch الموثقة
-CHECKSUMS-SHA256.txt                           # بصمات SHA-256 للملفات الأساسية
-```
-
-## اختبار سريع بعد الإقلاع
-
-```bash
-ss -ltnp | grep -E '8790|922' || true
-curl -s http://127.0.0.1:8790/health || true
-TOK=$(cat /root/.config/gs-qwen-bridge-token 2>/dev/null)
-curl -s -X POST http://127.0.0.1:8790/v1/chat/completions \
-  -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
-  -d '{"model":"Qwen3.8-Max","messages":[{"role":"user","content":"ما عاصمة فرنسا؟ أجب بكلمة واحدة."}]}'
+colab_desktop_v62_terminal_android_build_v32.py
+build_photo_editor.sh
+reports/
+patches/
+CHECKSUMS-SHA256.txt
 ```
 
 ## ملاحظة أمان
 
-لا تضع أي رمز مميز أو كلمة مرور داخل الملفات أو سجلات الكود. جميع المفاتيح الحساسة يجب إدخالها من داخل الجلسة أو تخزينها في ملفات صلاحيات مقفلة داخل Colab.
+لا تضع توكنات أو مفاتيح في ملفات الكود. غيّر/ألغِ أي توكن عُرض في المحادثة.
