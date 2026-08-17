@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# v61 / FINALIZER V31 QWEN BRIDGE ROBUST (2026-08-17):
+# - جسر Qwen يعمل مع Qwen Chat و Qwen Studio (chat.qwen.ai و qwen.ai/chat و chat-qwen.aliyun.com).
+# - اختيار التبويب النشط الفعلي بدل الاقتصار على chat.qwen.ai، مع تفضيل محادثة /c/ وتجاهل auth/login.
+# - استخراج الجواب من رسائل المساعد الحقيقية بأحدث محددات Qwen (chat.*-message) مع fallback واسع.
+# - إرسال عبر زر Send (الزر المطلوب فعليًا في واجهة Studio) بدل Enter فقط، مع بدائل قوية.
+# - كشف التوقف عند توقف المؤشر/العدّاد، وتقسيم الردود الطويلة، وتقارير أوضح عند الحاجة لتسجيل الدخول.
+# - رصد منفذ CDP ديناميكيًا (9223/9224/9222) ليعمل مع Chrome القديم والجديد بلا إعادة تشغيل.
+#
+# v60 / FINALIZER V30 QWEN3.8-MAX + ANDROID AGENT (2026-08-17):
+# - جسر Qwen3.8-Max مقاوم لتغيّر الواجهة: يفضّل محادثة /c/ ويتجاهل auth/login.
+# - استخراج جواب selector-agnostic + اختيار أحدث Qwen Max ظاهر + مهلات أسرع.
+# - بيئة Android كاملة للوكيل عبر shell/Gradle/SDK/ADB وide-call دون الاعتماد على النقر.
 # v59 / FINALIZER V29 APP-ZOOM + LOW-LATENCY PHONE (2026-08-17):
 # - إعادة XFCE/أيقونات سطح المكتب والقوائم إلى مقياس V27 الطبيعي 175%.
 # - فصل تكبير التطبيقات عن النظام: Antigravity/Cursor/Chrome/Android كبيرة ومكبّرة.
@@ -6144,7 +6156,7 @@ exec nice -n "$CHROME_NICE" /opt/google/chrome/google-chrome \
   --force-device-scale-factor=${CHROME_SCALE} --high-dpi-support=1 \
   \
   --disable-smooth-scrolling \
-  --remote-debugging-address=127.0.0.1 --remote-debugging-port="${GS_QWEN_CDP_PORT:-9224}" \
+  --remote-debugging-address=127.0.0.1 --remote-debugging-port="${GS_QWEN_CDP_PORT:-9223}" \
   --user-data-dir="$CHROME_USER_DATA_DIR" --password-store=basic "$@"
 """
 # V28: طبقة حركة مخفّضة لا تحجب الصور أو JavaScript؛ تُنهي CSS animations/
@@ -10482,7 +10494,7 @@ def _env_facts():
     except Exception:
         pass
     return ("الأدوات المتاحة فعلًا: %s\nANDROID_HOME=%s\n"
-            "workspace=%s | Desktop=/root/Desktop | APK tool: agent-apk <prepare|create|build|verify|export> | مشغّل أندرويد استوديو: setsid /usr/local/bin/android-studio-colab"
+            "workspace=%s | Desktop=/root/Desktop | Android projects=/root/Projects/AndroidStudio | APK tool: agent-apk <prepare|create|build|verify|export> | qwen-android status|open|build|test|logcat | IDE bridge: ide-call"
             % (", ".join(tools) or "الأدوات الأساسية", sdk, AGENT_WORKSPACE))
 
 
@@ -10529,8 +10541,11 @@ fi
 mkdir -p "$PROFILE_DIR" 2>/dev/null
 rm -f "$PROFILE_DIR"/SingletonLock "$PROFILE_DIR"/SingletonSocket \
       "$PROFILE_DIR"/SingletonCookie 2>/dev/null
-google-chrome --no-sandbox --disable-dev-shm-usage --app="$URL" \
-  --user-data-dir="$PROFILE_DIR" --start-maximized --lang=ar \
+/opt/google/chrome/google-chrome --no-sandbox --disable-dev-shm-usage --app="$URL" \
+  --user-data-dir="$PROFILE_DIR" --class=qwen-agent-ui --start-maximized --lang=ar \
+  --force-device-scale-factor=1.20 --high-dpi-support=1 \
+  --renderer-process-limit=2 --force-prefers-reduced-motion \
+  --disable-features=MediaRouter,OptimizationHints,Prerender2,SpeculationRulesPrefetchProxy \
   --no-first-run --no-default-browser-check >/dev/null 2>&1 &
 exit 0
 '''
@@ -10569,7 +10584,7 @@ TOKEN_FILE = os.path.expanduser("~/.config/gs-qwen-ui-token")
 ENDPOINT = (os.environ.get("GS_QWEN_ENDPOINT") or
             "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
 MODEL = os.environ.get("GS_AGENT_MODEL", "qwen-plus")
-MODEL_CANDIDATES = ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-coder-plus"]
+MODEL_CANDIDATES = ["qwen3.8-max", "qwen3.8-max-preview", "qwen-max", "qwen-plus", "qwen-coder-plus", "qwen-turbo"]
 CFG_MODEL_FILE = os.path.expanduser("~/.config/gs-qwen-model")
 CFG_SPEED_FILE = os.path.expanduser("~/.config/gs-qwen-speed")
 CFG_ENDPOINT_FILE = os.path.expanduser("~/.config/gs-qwen-endpoint")
@@ -10585,7 +10600,7 @@ def _cfg_read(path):
 
 API_KEY = os.environ.get("GS_AGENT_API_KEY", "") or _cfg_read(CFG_KEY_FILE)
 BRIDGE_ENDPOINT = os.environ.get("GS_QWEN_BRIDGE_ENDPOINT", "http://127.0.0.1:8790/v1")
-BRIDGE_MODEL = os.environ.get("GS_QWEN_BRIDGE_MODEL", "qwen-web")
+BRIDGE_MODEL = os.environ.get("GS_QWEN_BRIDGE_MODEL", "Qwen3.8-Max")
 CFG_BRIDGE_OFF_FILE = os.path.expanduser("~/.config/gs-qwen-bridge-off")
 BRIDGE_ENABLED = (os.environ.get("GS_QWEN_BRIDGE", "1").strip().lower() not in ("0", "false", "no", "off")
                   and not _cfg_read(CFG_BRIDGE_OFF_FILE))
@@ -10813,8 +10828,9 @@ SYS_PROMPT = (
     "   للملف النهائي أو اختبار تشغيل) ثم تُنهي بـ DONE.\n"
     "6) ممنوع نهائيًّا: kill/pkill/killall/shutdown/reboot/poweroff/halt/init/systemctl بأنواعها.\n"
     "7) إن فشل أمر حلّل السبب من مخرجاته وجرّب أسلوبًا مختلفًا — لا تكرر الأمر نفسه أبدًا.\n"
-    "أندرويد استوديو: شغّله منفصلًا: setsid /usr/local/bin/android-studio-colab >/dev/null 2>&1 &\n"
-    "   ANDROID_HOME=/root/Android/Sdk؛ adb وsdkmanager وavdmanager في PATH.\n"
+    "تكامل Android الإلزامي: استخدم qwen-android status|open|build|test|logcat وide-call.\n"
+    "   ANDROID_HOME=/root/Android/Sdk؛ JAVA_HOME=/opt/android-studio/jbr؛ مشاريع IDE في /root/Projects/AndroidStudio.\n"
+    "   عدّل ملفات المشروع نصيًا وابنِ واختبر عبر Gradle أولًا؛ افتح Android Studio للمشاهدة والتحرير فقط.\n"
     "   لبناء APK: أنشئ مشروع gradle نصيًّا داخل AGENT_WORKSPACE باستخدام agent-apk\n"
     "   وانسخ الناتج من app/build/outputs/apk/debug/*.apk — لا تستخدم معالجات الواجهة.\n"
     "قواعد السرعة الإلزامية (أولوية قصوى):\n"
@@ -12264,6 +12280,11 @@ export GS_UI_SERVER=/usr/local/lib/gs-qwen-agent-server.py
 export GS_UI_PROFILE=/root/.gs-qwen-ui
 export GS_UI_LOG=/tmp/gs-qwen-server.log
 export GS_AGENT_WORKSPACE=/root/agent-workspaces/qwen
+export ANDROID_HOME=/root/Android/Sdk ANDROID_SDK_ROOT=/root/Android/Sdk
+export JAVA_HOME="${JAVA_HOME:-/opt/android-studio/jbr}"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$JAVA_HOME/bin:$PATH"
+export GRADLE_USER_HOME=/root/.gradle
+mkdir -p "$GS_AGENT_WORKSPACE" /root/Projects/AndroidStudio /root/.gradle 2>/dev/null || true
 exec /usr/local/bin/gs-agent-ui
 '''
 
@@ -12349,6 +12370,22 @@ with open('/tmp/gs-qwen', 'w', encoding='utf-8') as f:
     f.write(gs_qwen_sh)
 run("sudo cp /tmp/gs-qwen /usr/local/bin/gs-qwen && "
     "sudo chmod +x /usr/local/bin/gs-qwen")
+qwen_android_sh=r'''#!/bin/bash
+set -euo pipefail
+export ANDROID_HOME=/root/Android/Sdk ANDROID_SDK_ROOT=/root/Android/Sdk
+export JAVA_HOME="${JAVA_HOME:-/opt/android-studio/jbr}"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$JAVA_HOME/bin:$PATH"
+ROOT="${2:-/root/Projects/AndroidStudio}"
+case "${1:-status}" in
+ status) printf 'ANDROID_HOME=%s\nJAVA_HOME=%s\n' "$ANDROID_HOME" "$JAVA_HOME"; command -v java gradle adb sdkmanager 2>/dev/null||true;;
+ open) setsid /usr/local/bin/android-studio-colab "$ROOT" >/tmp/qwen-android-studio.log 2>&1 & echo "$!";;
+ build) cd "$ROOT"; if [ -x ./gradlew ];then ./gradlew --no-daemon --console=plain "${3:-assembleDebug}";else gradle --no-daemon --console=plain "${3:-assembleDebug}";fi;;
+ test) cd "$ROOT"; if [ -x ./gradlew ];then ./gradlew --no-daemon --console=plain test;else gradle --no-daemon --console=plain test;fi;;
+ logcat) exec adb logcat -v threadtime;;
+ *) echo 'qwen-android status|open [project]|build [project] [task]|test [project]|logcat' >&2;exit 64;;
+esac
+'''
+Path('/usr/local/bin/qwen-android').write_text(qwen_android_sh,encoding='utf-8');os.chmod('/usr/local/bin/qwen-android',0o755)
 # v136: روابط أدوات أندرويد للوكيل (idempotent — لا تفشل إن غابت)
 run("for t in adb fastboot; do s=/root/Android/Sdk/platform-tools/$t; "
     "[ -x $s ] && sudo ln -sf $s /usr/local/bin/$t || true; done")
@@ -12361,20 +12398,33 @@ run("mkdir -p /root/workspace /root/Desktop 2>/dev/null || true")
 # ============================================================
 gs_qwen_bridge_py = r'''#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# «جسر كوين» v2 — طبقة OpenAI محلية كاملة فوق واجهة chat.qwen.ai الحقيقية داخل كروم الأصلي.
-# مرونة: اعتراض الشبكة لتتبّع الاستقرار + استخراج DOM براغماتي + شفاء ذاتي + ضمان كروم والمنفذ.
+# «جسر كوين» v3 — طبقة OpenAI محلية فوق واجهة Qwen الحقيقية (Qwen Chat + Qwen Studio).
+# يدعم chat.qwen.ai و qwen.ai/chat و chat-qwen.aliyun.com، ويلتقط منفذ CDP ديناميكيًا،
+# ويرسل عبر زر Send الفعلي، ويستخرج جواب المساعد بأحدث محددات Qwen مع fallback واسع.
 import base64, json, os, secrets, socket, struct, subprocess, threading, time
 import urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 BRIDGE_PORT = int(os.environ.get("GS_QWEN_BRIDGE_PORT", "8790"))
-CDP_PORT = int(os.environ.get("GS_QWEN_CDP_PORT", "9224"))
+DEFAULT_CDP_PORTS = tuple(int(x) for x in os.environ.get(
+    "GS_QWEN_CDP_PORTS", "9224,9223,9222").replace(";", ",").split(",") if x.strip())
+CDP_PORT_ENV = os.environ.get("GS_QWEN_CDP_PORT", "").strip()
+if CDP_PORT_ENV.isdigit():
+    CDP_PORTS = (int(CDP_PORT_ENV),) + tuple(p for p in DEFAULT_CDP_PORTS if p != int(CDP_PORT_ENV))
+else:
+    CDP_PORTS = DEFAULT_CDP_PORTS
 CHAT_URL = os.environ.get("GS_QWEN_CHAT_URL", "https://chat.qwen.ai/")
-MODEL = os.environ.get("GS_QWEN_BRIDGE_MODEL", "qwen-web")
+MODEL = os.environ.get("GS_QWEN_BRIDGE_MODEL", "Qwen3.8-Max")
 TOKEN_FILE = os.path.expanduser("~/.config/gs-qwen-bridge-token")
 FAKE = bool(os.environ.get("GS_QWEN_BRIDGE_FAKE"))
 DISPLAY = os.environ.get("DISPLAY", ":1")
+
+# Hosts/keywords that count as a Qwen chat tab. Qwen Studio currently runs at
+# chat.qwen.ai in the logged-in user's window, but we also accept the newer
+# qwen.ai and Aliyun Studio domains to resist front-end changes.
+QWEN_HOSTS = ("chat.qwen.ai", "qwen.ai", "chat-qwen.aliyun.com", "tongyi.aliyun.com")
+AUTH_FRAGMENTS = ("/auth", "signin", "login", "signup", "register", "callback")
 
 
 def _load_token():
@@ -12401,19 +12451,29 @@ TOKEN = _load_token()
 class _WS:
     def __init__(self, url, timeout=15):
         u = urlparse(url)
-        self.sock = socket.create_connection((u.hostname, u.port or 80), timeout=timeout)
+        host, port = u.hostname, (u.port or (443 if u.scheme == "wss" else 80))
+        self._tls = (u.scheme == "wss")
+        raw = socket.create_connection((host, port), timeout=timeout)
+        if self._tls:
+            import ssl
+            ctx = ssl.create_default_context()
+            self.sock = ctx.wrap_socket(raw, server_hostname=host)
+        else:
+            self.sock = raw
         key = base64.b64encode(os.urandom(16)).decode()
         path = (u.path or "/") + (("?" + u.query) if u.query else "")
         req = ("GET %s HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\n"
                "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n"
-               % (path, u.hostname, u.port or 80, key))
+               % (path, host, port, key))
         self.sock.sendall(req.encode())
         resp = b""
         while b"\r\n\r\n" not in resp:
             chunk = self.sock.recv(4096)
             if not chunk:
-                raise IOError("ws closed")
+                raise IOError("ws closed during handshake")
             resp += chunk
+        if b" 101" not in resp.split(b"\r\n", 1)[0]:
+            raise IOError("ws handshake failed: " + resp.split(b"\r\n", 1)[0].decode("utf-8", "replace"))
         self.buf = resp.split(b"\r\n\r\n", 1)[1]
         self.sock.settimeout(timeout)
 
@@ -12423,11 +12483,9 @@ class _WS:
         if n < 126:
             header.append(0x80 | n)
         elif n < 65536:
-            header.append(0x80 | 126)
-            header += struct.pack(">H", n)
+            header.append(0x80 | 126); header += struct.pack(">H", n)
         else:
-            header.append(0x80 | 127)
-            header += struct.pack(">Q", n)
+            header.append(0x80 | 127); header += struct.pack(">Q", n)
         mask = os.urandom(4)
         header += mask
         self.sock.sendall(bytes(header) + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
@@ -12449,10 +12507,8 @@ class _WS:
         payload = b""
         while True:
             b1, b2 = self._read_exact(2)
-            fin = b1 & 0x80
-            opcode = b1 & 0x0F
-            masked = b2 & 0x80
-            ln = b2 & 0x7F
+            fin = b1 & 0x80; opcode = b1 & 0x0F
+            masked = b2 & 0x80; ln = b2 & 0x7F
             if ln == 126:
                 ln = struct.unpack(">H", self._read_exact(2))[0]
             elif ln == 127:
@@ -12462,8 +12518,7 @@ class _WS:
             if masked:
                 data = bytes(c ^ mask[i % 4] for i, c in enumerate(data))
             if opcode == 0x9:
-                self._send_frame(0xA, data)
-                continue
+                self._send_frame(0xA, data); continue
             if opcode == 0x8:
                 raise IOError("ws close")
             if opcode in (0x1, 0x2, 0x0):
@@ -12480,8 +12535,7 @@ class _CDP:
 
     def call(self, method, params=None, timeout=30):
         with self.lock:
-            mid = self.next_id
-            self.next_id += 1
+            mid = self.next_id; self.next_id += 1
             self.ws.send_text(json.dumps({"id": mid, "method": method, "params": params or {}}))
             t0 = time.time()
             while time.time() - t0 < timeout:
@@ -12501,114 +12555,281 @@ class _CDP:
 
 _INJECT_JS = r"""
 (function(){
-  if (window.__qwenBridge) return true;
-  var B = window.__qwenBridge = {netLen: 0, text: '', chunks: [], wsText: ''};
-  function bump(n){ B.netLen += n; }
-  try {
+  if (window.__qwenBridgeV3) return true;
+  var B = window.__qwenBridgeV3 = {netLen:0, lastBodyLen:0, busy:false, sentAt:0};
+  function bump(n){ try{ B.netLen += n|0; }catch(e){} }
+  try{
     var of_ = window.fetch;
     window.fetch = function(){
       var p = of_.apply(this, arguments);
       p.then(function(r){
-        try {
+        try{
           var cl = r.clone();
-          if (cl.body && cl.body.getReader) {
+          if(cl.body && cl.body.getReader){
             var rd = cl.body.getReader();
             (function pump(){ rd.read().then(function(res){
-              if (res.value) bump(res.value.length);
-              if (!res.done) pump();
+              if(res.value) bump(res.value.length);
+              if(!res.done) pump();
             }).catch(function(){}); })();
           }
-        } catch(e){}
+        }catch(e){}
       }).catch(function(){});
       return p;
     };
-  } catch(e){}
-  try {
+  }catch(e){}
+  try{
     var OWS = window.WebSocket;
     window.WebSocket = function(u, pr){
       var ws = pr ? new OWS(u, pr) : new OWS(u);
       ws.addEventListener('message', function(ev){
-        try { bump(String(ev.data || '').length); } catch(e){}
+        try{ bump(String(ev.data || '').length); }catch(e){}
       });
       return ws;
     };
     window.WebSocket.prototype = OWS.prototype;
-  } catch(e){}
+  }catch(e){}
   return true;
 })()
 """
 
 _FOCUS_JS = r"""
 (function(){
-  var els = document.querySelectorAll('textarea, div[contenteditable="true"], [role="textbox"]');
-  for (var j=0;j<els.length;j++){
-    var r = els[j].getBoundingClientRect();
-    if (r.width > 60 && r.height > 12){ els[j].focus(); return true; }
+  var sels = [
+    'textarea.message-input-textarea','textarea[data-testid="chat-input"]',
+    'textarea[placeholder*="Send"]','textarea[placeholder*="message"]',
+    'textarea[placeholder*="رسالة"]','textarea[placeholder*="إرسال"]',
+    'div[contenteditable="true"][role="textbox"]','div[contenteditable="true"]',
+    '[role="textbox"]','textarea'
+  ];
+  var all=[];
+  sels.forEach(function(s){ try{ document.querySelectorAll(s).forEach(function(e){all.push(e);}); }catch(_e){} });
+  var best=null, score=-1;
+  for(var j=0;j<all.length;j++){
+    var e=all[j], r=e.getBoundingClientRect(), cs=getComputedStyle(e);
+    if(r.width<80||r.height<16||r.bottom<0||r.top>innerHeight||r.left<0||r.right>innerWidth) continue;
+    if(cs.visibility==='hidden'||cs.display==='none'||e.disabled||e.readOnly) continue;
+    var s=(r.width*r.height)+(r.bottom*1000);
+    if(/message|chat|input|send|prompt|إرسال|رسالة/i.test((e.className||'')+' '+(e.id||'')+' '+(e.getAttribute('placeholder')||''))) s+=50000;
+    if(s>score){score=s;best=e;}
   }
-  return false;
+  if(!best) return {ok:false, reason:'no_visible_input'};
+  try{ best.scrollIntoView({block:'center'}); }catch(_e){}
+  best.focus();
+  try{ best.click(); }catch(_e2){}
+  return {ok:true, tag:best.tagName, cls:String(best.className||'').slice(0,120),
+          rect:[Math.round(best.getBoundingClientRect().x),Math.round(best.getBoundingClientRect().y),
+                Math.round(best.getBoundingClientRect().width),Math.round(best.getBoundingClientRect().height)]};
+})()
+"""
+
+_SELECT_MODEL_JS = r"""
+(async function(){
+  function visible(e){var r=e.getBoundingClientRect(),c=getComputedStyle(e);return r.width>8&&r.height>8&&r.bottom>0&&r.top<innerHeight&&c.display!=='none'&&c.visibility!=='hidden';}
+  function norm(t){return String(t||'').replace(/\s+/g,' ').trim();}
+  function parse(t){
+    t=norm(t);
+    var m=t.match(/Qwen\s*(\d+(?:\.\d+)*)\s*[- ]?Max/i);
+    if(!m) return null;
+    return {name:'Qwen'+m[1].replace(/\./g,'.')+'-Max', raw:t, v:m[1].split('.').map(Number)};
+  }
+  function newer(a,b){for(var i=0;i<Math.max(a.v.length,b.v.length);i++){var x=a.v[i]||0,y=b.v[i]||0;if(x!==y)return x>y;}return false;}
+  var clickables=[...document.querySelectorAll('button,[role="button"],[role="combobox"]')].filter(visible);
+  var current=clickables.map(function(e){return {e:e,p:parse(e.innerText)};}).find(function(x){return x.p;});
+  if(current){try{current.e.click();await new Promise(function(r){return setTimeout(r,450);});}catch(_e){}}
+  var opts=[...document.querySelectorAll('button,[role="button"],[role="option"],[role="menuitem"],[role="listbox"] *')]
+    .filter(visible).map(function(e){return {e:e,p:parse(e.innerText)};}).filter(function(x){return x.p;});
+  var best=current||null;
+  opts.forEach(function(x){ if(!best||newer(x.p,best.p)) best=x; });
+  if(best&&(!current||best.p.raw!==current.p.raw)){
+    try{ best.e.click(); await new Promise(function(r){return setTimeout(r,450);}); }catch(_e2){}
+  }else if(current){ try{ document.body.click(); }catch(_e3){} }
+  return best?best.p.name:(current?current.p.name:'');
+})()
+"""
+
+_SEND_CLICK_JS = r"""
+(function(){
+  function visible(e){var r=e.getBoundingClientRect(),c=getComputedStyle(e);return r.width>=8&&r.height>=8&&r.bottom>0&&r.top<innerHeight&&r.left>=0&&r.right<=innerWidth&&c.display!=='none'&&c.visibility!=='hidden';}
+  var text='';
+  try{ var ta=document.querySelector('textarea.message-input-textarea, textarea[data-testid="chat-input"], [role="textbox"]'); if(ta) text=(ta.value||ta.textContent||''); }catch(_e){}
+  var cands=[...document.querySelectorAll('button, [role="button"], [type="submit"]')].filter(visible);
+  var best=null, score=-1;
+  for(var i=0;i<cands.length;i++){
+    var e=cands[i], r=e.getBoundingClientRect(), t=((e.innerText||e.getAttribute('aria-label')||e.title||'')+' '+(e.getAttribute('data-testid')||'')).trim().toLowerCase();
+    var disabled=e.disabled||e.getAttribute('aria-disabled')==='true'||/disabled/.join?false:false;
+    if(e.getAttribute('aria-disabled')==='true') continue;
+    var s=0;
+    if(/^(send|إرسال|ارسال|أرسل|ادخل)$/.test(t)) s+=1000;
+    if(/send|submit|إرسال|ارسال/.test(t)) s+=500;
+    if(/stop|إيقاف|توقف/.test(t)) s-=2000;
+    // Buttons near the input box (bottom of screen) are strong candidates.
+    if(r.top>innerHeight*0.55) s+=200;
+    if(r.width>16&&r.width<120&&r.height>16&&r.height<90) s+=100;
+    if(s>score){score=s;best=e;}
+  }
+  if(!best) return {ok:false, reason:'no_send_button', text:text, count:cands.length};
+  try{ best.click(); return {ok:true, text:text, label:(best.innerText||best.getAttribute('aria-label')||best.title||'').slice(0,80)}; }
+  catch(e){ return {ok:false, reason:'click_failed:'+e, text:text}; }
 })()
 """
 
 _CLEAR_JS = r"""
-(function(){ var B = window.__qwenBridge; if (B){ B.chunks = []; B.wsText = ''; } return true; })()
+(function(){ var B = window.__qwenBridgeV3; if(B){ B.netLen=0; B.busy=false; B.sentAt=Date.now(); } return true; })()
 """
 
 _STATE_JS = r"""
 (function(){
-  var B = window.__qwenBridge || {netLen: 0};
-  var sels = ['.markdown-body', '[class*="markdown"]', '.message-item:last-child [class*="content"]',
-              '[class*="assistant"] [class*="content"]', 'main [class*="message"]'];
-  var best = '';
-  for (var i=0;i<sels.length;i++){
-    try {
-      var els = document.querySelectorAll(sels[i]);
-      for (var j=0;j<els.length;j++){
-        var t = (els[j].innerText || '').trim();
-        if (t.length > best.length) best = t;
-      }
-    } catch(e){}
+  var B=window.__qwenBridgeV3||{};
+  var answers=[]; var seen=new Set();
+  function clean(t){ return String(t||'').replace(/\u00a0/g,' ').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim(); }
+
+  function stripThinking(t){
+    t=String(t||'');
+    // Remove leading process/status lines that Qwen Studio shows above the answer.
+    t=t.replace(/^\s*(Thinking completed|Thinking complete|Thinking\.\.\.|Thinking|Deep thinking|Reasoning completed|Reasoning|Qwen is thinking|تم التفكير|جارٍ التفكير|جاري التفكير|اكتمل التفكير)[\s:：\-.\n]*/i,'');
+    return t;
   }
-  return JSON.stringify({netLen: B.netLen || 0, text: best});
+  function isProcessOnly(t){
+    var x=String(t||'').trim().toLowerCase();
+    if(!x) return true;
+    if(x.length<=24 && /^(thinking|reasoning|deep thinking|thinking completed|thinking\.\.\.|تم التفكير|جارٍ التفكير|اكتمل التفكير)[\s:：\-.]*$/i.test(x)) return true;
+    return false;
+  }
+  function add(e){
+    try{
+      var r=e.getBoundingClientRect();
+      if(r.width<20||r.height<8) return;
+      var t=stripThinking(clean(e.innerText||e.textContent||''));
+      if(t && t.length>1 && t.length<60000 && !isProcessOnly(t) && !seen.has(t)){ seen.add(t); answers.push(t); }
+    }catch(_e){}
+  }
+
+  // Exclude any element that is (or is inside) a user-message container.
+  function isUserContainer(e){
+    var n=e;
+    while(n && n!==document.body){
+      var role=n.getAttribute && (n.getAttribute('data-message-author-role')||n.getAttribute('data-role')||'');
+      if(role==='user') return true;
+      var cls=String(n.className||'');
+      if(/user-message|user-bubble|message-user|human-message/i.test(cls)) return true;
+      n=n.parentElement;
+    }
+    return false;
+  }
+  // Current Qwen/Chat selectors — assistant blocks only (never user messages).
+  var sels=[
+    '[data-message-author-role="assistant"]','[data-role="assistant"]',
+    'chat-assistant-message','.chat-assistant-message','[class*="assistant-message"]',
+    '[class*="AssistantMessage"]','[class*="answer"]','[class*="bubble"][class*="assistant"]'
+  ];
+  sels.forEach(function(s){ try{ document.querySelectorAll(s).forEach(function(e){ if(!isUserContainer(e)) add(e); }); }catch(_e){} });
+  try{
+    document.querySelectorAll('.markdown-body,[class*="markdown"]').forEach(function(e){
+      if(!isUserContainer(e)) add(e);
+    });
+  }catch(_e2){}
+  // Protocol lines used by agent prompts (kept for compatibility).
+  try{
+    document.querySelectorAll('div,section,p,pre,code').forEach(function(e){
+      var t=clean(e.innerText||e.textContent||'');
+      if(/^(CMD:|DONE:|ASK:)/.test(t)) add(e);
+    });
+  }catch(_e2){}
+  var body=''; try{ body=clean(document.body.innerText||''); }catch(_e3){}
+  var model='';
+  try{ var ms=body.match(/Qwen\s*\d+(?:\.\d+)*\s*[- ]?Max/ig); if(ms&&ms.length) model=ms[ms.length-1].replace(/\s+/g,''); }catch(_e4){}
+  // Busy/done heuristics: a visible Stop button or a "stop generating" control means streaming.
+  var busy=false;
+  try{
+    var btns=[...document.querySelectorAll('button,[role="button"]')];
+    busy=btns.some(function(b){var r=b.getBoundingClientRect();if(r.width<8||r.height<8)return false;var t=((b.innerText||b.getAttribute('aria-label')||b.title||'')+' '+(b.getAttribute('data-testid')||'')).toLowerCase();return /stop|إيقاف|توقف|generating|stop generating/.test(t);});
+  }catch(_e5){}
+  // Login prompt detection.
+  var login=/sign in|log in|login|تسجيل الدخول|تسجيل دخول|auth/i.test(body) && answers.length===0;
+  function stripThinkingClient(t){ return String(t||'').replace(/^\s*(Thinking completed|Thinking complete|Thinking\.\.\.|Thinking|Deep thinking|Reasoning completed|Reasoning|Qwen is thinking|تم التفكير|جارٍ التفكير|جاري التفكير|اكتمل التفكير)[\s:：\-.\n]*/i,'').trim(); }
+  var last=stripThinkingClient(answers.length?answers[answers.length-1]:'');
+  return JSON.stringify({netLen:B.netLen||0, answers:answers.slice(-100), last:last, body:body.slice(-120000), model:model, busy:busy, login:login});
 })()
 """
 
 
-def _cdp_targets():
-    with urllib.request.urlopen("http://127.0.0.1:%d/json/list" % CDP_PORT, timeout=8) as r:
+def _http_json(port, path, method="GET", timeout=8):
+    with urllib.request.urlopen(urllib.request.Request(
+            "http://127.0.0.1:%d%s" % (port, path), method=method), timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+def _cdp_targets(port):
+    return _http_json(port, "/json/list")
+
+
+def _probe_ports():
+    alive = []
+    for port in CDP_PORTS:
+        try:
+            targets = _cdp_targets(port)
+            alive.append((port, targets))
+        except Exception:
+            continue
+    return alive
+
+
 def _find_or_create_tab():
-    ws_url = ""
-    try:
-        for t in _cdp_targets():
-            if t.get("type") == "page" and "qwen" in str(t.get("url", "")).lower():
-                ws_url = t.get("webSocketDebuggerUrl", "")
-                if ws_url:
-                    return ws_url
-    except Exception:
-        pass
-    req = urllib.request.Request(
-        "http://127.0.0.1:%d/json/new?%s" % (CDP_PORT, CHAT_URL), method="PUT")
-    with urllib.request.urlopen(req, timeout=10) as r:
-        data = json.loads(r.read().decode("utf-8", "replace"))
-    ws_url = data.get("webSocketDebuggerUrl", "")
-    if not ws_url:
-        raise IOError("no websocket url for new tab")
-    time.sleep(4)
-    return ws_url
+    """Return (ws_url, port) for the best Qwen tab, or create one."""
+    ranked = []
+    for port, targets in _probe_ports():
+        for t in targets:
+            if t.get("type") != "page":
+                continue
+            url = str(t.get("url", ""))
+            u = urlparse(url)
+            host = (u.hostname or "").lower()
+            if not any(host == h or host.endswith("." + h) for h in QWEN_HOSTS):
+                continue
+            ws = t.get("webSocketDebuggerUrl", "")
+            if not ws:
+                continue
+            low = url.lower()
+            bad = any(x in low for x in AUTH_FRAGMENTS)
+            score = (-1000 if bad else 0)
+            if "/c/" in low or "/chat/" in low or "/conversation" in low:
+                score += 500
+            if low.rstrip("/") in ("https://chat.qwen.ai", "https://qwen.ai/chat", "https://chat.qwen.ai/"):
+                score += 100
+            title = str(t.get("title", "")).lower()
+            if "qwen" in title or "studio" in title:
+                score += 50
+            ranked.append((score, ws, url, port))
+    ranked.sort(reverse=True, key=lambda x: x[0])
+    if ranked and ranked[0][0] >= 0:
+        return ranked[0][1], ranked[0][3]
+    # Create a tab on the first reachable CDP port.
+    last_err = None
+    for port, _ in _probe_ports() or [(CDP_PORTS[0], [])]:
+        try:
+            req = urllib.request.Request(
+                "http://127.0.0.1:%d/json/new?%s" % (port, CHAT_URL), method="PUT")
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            ws_url = data.get("webSocketDebuggerUrl", "")
+            if ws_url:
+                time.sleep(4)
+                return ws_url, port
+        except Exception as e:
+            last_err = e
+    raise RuntimeError("لم أجد تبويب Qwen/Chrome على منافذ CDP %s — شغّل Chrome1 أو سجّل دخول Qwen أولًا (%s)"
+                       % (",".join(str(x) for x in CDP_PORTS), last_err))
 
 
 def _ensure_cdp():
-    cdp = _CDP(_find_or_create_tab())
-    try:
-        cdp.call("Page.enable", timeout=12)
-    except Exception:
-        pass
-    try:
-        cdp.call("Runtime.enable", timeout=12)
-    except Exception:
-        pass
+    ws_url, port = _find_or_create_tab()
+    cdp = _CDP(ws_url)
+    cdp.cdp_port = port
+    for dom in ("Page.enable", "Runtime.enable", "Network.enable"):
+        try:
+            cdp.call(dom, timeout=12)
+        except Exception:
+            pass
     cdp.call("Runtime.evaluate", {"expression": _INJECT_JS, "returnByValue": True}, timeout=15)
     return cdp
 
@@ -12619,38 +12840,136 @@ def _eval_state(cdp):
     try:
         return json.loads(raw)
     except Exception:
-        return {"netLen": 0, "text": ""}
+        return {"netLen": 0, "answers": [], "last": "", "body": "", "model": "", "busy": False, "login": False}
 
 
-def _send_and_wait(cdp, text, timeout=180):
-    cdp.call("Runtime.evaluate", {"expression": _CLEAR_JS, "returnByValue": True}, timeout=12)
-    cdp.call("Runtime.evaluate", {"expression": _FOCUS_JS, "returnByValue": True}, timeout=12)
-    time.sleep(0.4)
+def _type_text(cdp, text):
+    # Use the CDP insertText path for contenteditable/textarea; fall back to setting value.
     cdp.call("Input.insertText", {"text": text}, timeout=15)
-    time.sleep(0.3)
-    for kind in ("keyDown", "keyUp"):
-        cdp.call("Input.dispatchKeyEvent",
-                 {"type": kind, "key": "Enter", "code": "Enter",
-                  "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13}, timeout=12)
+    time.sleep(0.12)
+    verify = cdp.call("Runtime.evaluate", {"expression": r"""
+        (function(){
+          var e=document.querySelector('textarea.message-input-textarea, textarea[data-testid="chat-input"], [role="textbox"], textarea, [contenteditable="true"]');
+          if(!e) return '';
+          return String(e.value!==undefined?e.value:(e.textContent||'')).slice(-80);
+        })()
+    """, "returnByValue": True}, timeout=10)
+    val = str(verify.get("result", {}).get("value") or "")
+    return val
+
+
+def _clean_answer(answer, prompt=""):
+    """Remove echoed prompt and 'Thinking completed' status lines from Qwen output."""
+    if not isinstance(answer, str):
+        return answer
+    t = answer.strip()
+    bad_prefixes = ("thinking completed", "thinking complete", "thinking...", "thinking",
+                    "deep thinking", "reasoning completed", "reasoning", "qwen is thinking",
+                    "تم التفكير", "جارٍ التفكير", "جاري التفكير", "اكتمل التفكير")
+    changed = True
+    while changed:
+        changed = False
+        low = t.lower().lstrip("\n \t:-")
+        for bp in bad_prefixes:
+            if low.startswith(bp):
+                t = t[len(bp):].lstrip(" \n\t:：-.")
+                changed = True
+                break
+    if prompt:
+        p = prompt.strip()
+        if p and p in t:
+            idx = t.rfind(p)
+            tail = t[idx+len(p):].lstrip(" \n\t:：-.")
+            if len(tail) >= 2:
+                t = tail
+    lines = [ln for ln in t.split("\n") if ln.strip()]
+    if len(lines) >= 2:
+        mid = len(lines)//2
+        if lines[:mid] == lines[mid:] and mid >= 1:
+            t = "\n".join(lines[:mid]).strip()
+    return t.strip()
+
+
+def _send_and_wait(cdp, text, timeout=120):
+    before = _eval_state(cdp)
+    before["prompt"] = text
+    before_answers = set(before.get("answers") or [])
+    # Select the highest Max model visible (best effort).
+    try:
+        sel = cdp.call("Runtime.evaluate",
+                       {"expression": _SELECT_MODEL_JS, "awaitPromise": True, "returnByValue": True}, timeout=20)
+        chosen = str(sel.get("result", {}).get("value") or "").strip()
+        if chosen:
+            globals()["MODEL"] = chosen
+    except Exception:
+        pass
+    cdp.call("Runtime.evaluate", {"expression": _CLEAR_JS, "returnByValue": True}, timeout=12)
+    focus = cdp.call("Runtime.evaluate", {"expression": _FOCUS_JS, "returnByValue": True}, timeout=12)
+    fval = focus.get("result", {}).get("value") or {}
+    if not (isinstance(fval, dict) and fval.get("ok")):
+        raise RuntimeError("Qwen input not found or not signed in (%s)" % (fval.get("reason") if isinstance(fval, dict) else "unknown"))
+    time.sleep(0.15)
+    _type_text(cdp, text)
+    time.sleep(0.2)
+    # Primary send: click the visible Send button (what Qwen Studio actually uses).
+    sent = cdp.call("Runtime.evaluate", {"expression": _SEND_CLICK_JS, "returnByValue": True}, timeout=12)
+    sval = sent.get("result", {}).get("value") or {}
+    clicked = isinstance(sval, dict) and sval.get("ok")
+    if not clicked:
+        # Fallback A: Ctrl+Enter (some Qwen layouts). Fallback B: plain Enter.
+        for combo in (("ctrl", "Enter"), (None, "Enter")):
+            mods = 2 if combo[0] == "ctrl" else 0
+            cdp.call("Input.dispatchKeyEvent", {
+                "type": "keyDown", "modifiers": mods, "key": "Enter", "code": "Enter",
+                "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13}, timeout=12)
+            cdp.call("Input.dispatchKeyEvent", {
+                "type": "keyUp", "modifiers": mods, "key": "Enter", "code": "Enter",
+                "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13}, timeout=12)
+            time.sleep(0.25)
+            st0 = _eval_state(cdp)
+            if st0.get("busy") or (st0.get("netLen", 0) > (before.get("netLen", 0) + 8)):
+                break
     t0 = time.time()
     last_text = ""
     stable = 0
+    last_change = t0
     while time.time() - t0 < timeout:
-        time.sleep(1.0)
+        time.sleep(0.6)
         st = _eval_state(cdp)
-        cur = (st.get("text") or "").strip()
-        if cur and cur == last_text:
-            stable += 1
-            if stable >= 4:
-                return cur
+        if st.get("login"):
+            raise RuntimeError("Qwen يطلب تسجيل الدخول — افتح Chrome1/Qwen Studio وسجّل الدخول ثم أعد المحاولة")
+        answers = st.get("answers") or []
+        fresh = [x.strip() for x in answers if x.strip() and x not in before_answers]
+        # Prefer an explicit protocol line if present (agent mode); otherwise the latest answer.
+        protocol = [x for x in fresh if x.startswith(("CMD:", "DONE:", "ASK:"))]
+        cur = (protocol[-1] if protocol else (fresh[-1] if fresh else (st.get("last") or ""))).strip()
+        # Body-level fallback for the latest CMD/DONE/ASK if DOM collection missed it.
+        if not cur:
+            body = st.get("body") or ""
+            positions = [body.rfind("\nCMD:"), body.rfind("\nDONE:"), body.rfind("\nASK:"),
+                         body.rfind("CMD:"), body.rfind("DONE:"), body.rfind("ASK:")]
+            idx = max(positions)
+            if idx >= 0:
+                cur = body[idx:].strip()
+        now = time.time()
+        if cur:
+            if cur != last_text:
+                last_text = cur; stable = 0; last_change = now
+            else:
+                stable += 1
+                # Consider the answer done if: text is stable, not actively streaming, and we waited enough.
+                if stable >= 2 and not st.get("busy") and (now - t0) > 4:
+                    return _clean_answer(cur, before.get("prompt") or "")
         else:
             stable = 0
-            last_text = cur
-    raise TimeoutError("qwen web answer timeout")
+        # If streaming clearly ended (no busy, network silent for 3s after a first answer), return.
+        if last_text and not st.get("busy") and (now - last_change) >= 3.0:
+            return _clean_answer(last_text, before.get("prompt") or "")
+    raise TimeoutError("qwen web answer timeout after %ds (last: %s)" % (int(timeout), last_text[:120]))
 
 
 _BRIDGE_LOCK = threading.Lock()
-_cdp_cache = {"cdp": None, "ts": 0.0}
+_cdp_cache = {"cdp": None, "ts": 0.0, "port": 0}
 
 
 def _run_turn(text):
@@ -12665,19 +12984,24 @@ def _run_turn(text):
             cdp = _ensure_cdp()
             _cdp_cache["cdp"] = cdp
             _cdp_cache["ts"] = time.time()
+            _cdp_cache["port"] = getattr(cdp, "cdp_port", 0)
         try:
             return _send_and_wait(cdp, text)
-        except Exception:
+        except Exception as first:
             try:
                 cdp.close()
             except Exception:
                 pass
             _cdp_cache["cdp"] = None
             time.sleep(1.0)
-            cdp = _ensure_cdp()
-            _cdp_cache["cdp"] = cdp
-            _cdp_cache["ts"] = time.time()
-            return _send_and_wait(cdp, text)
+            try:
+                cdp = _ensure_cdp()
+                _cdp_cache["cdp"] = cdp
+                _cdp_cache["ts"] = time.time()
+                _cdp_cache["port"] = getattr(cdp, "cdp_port", 0)
+                return _send_and_wait(cdp, text)
+            except Exception as second:
+                raise RuntimeError("Qwen bridge failed twice: %s | retry: %s" % (first, second))
 
 
 def _json_reply(h, obj, code=200):
@@ -12691,7 +13015,7 @@ def _json_reply(h, obj, code=200):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "GSQwenBridge/2.0"
+    server_version = "GSQwenBridge/3.0"
 
     def log_message(self, *a):
         pass
@@ -12705,38 +13029,38 @@ class Handler(BaseHTTPRequestHandler):
     def _body(self):
         try:
             ln = int(self.headers.get("Content-Length") or "0")
-            return json.loads(self.rfile.read(min(ln, 524288)).decode("utf-8", "replace"))
+            return json.loads(self.rfile.read(min(ln, 1048576)).decode("utf-8", "replace"))
         except Exception:
             return {}
 
     def do_GET(self):
         u = urlparse(self.path)
         if u.path == "/token":
-            _json_reply(self, {"token": TOKEN})
-            return
+            _json_reply(self, {"token": TOKEN}); return
         if u.path == "/v1/models":
             if not self._auth_ok():
-                _json_reply(self, {"error": {"message": "forbidden", "type": "auth"}}, 403)
-                return
+                _json_reply(self, {"error": {"message": "forbidden", "type": "auth"}}, 403); return
             _json_reply(self, {"object": "list", "data": [
-                {"id": MODEL, "object": "model", "created": int(time.time()),
-                 "owned_by": "qwen-web"}]})
-            return
+                {"id": MODEL, "object": "model", "created": int(time.time()), "owned_by": "qwen-web"}]}); return
         if u.path == "/health":
             alive = "fake" if FAKE else bool(_cdp_cache["cdp"])
-            _json_reply(self, {"ok": True, "model": MODEL, "cdp": alive})
-            return
+            ports = []
+            try:
+                for port, _ in _probe_ports():
+                    ports.append(port)
+            except Exception:
+                pass
+            _json_reply(self, {"ok": True, "model": MODEL, "cdp": alive,
+                               "cdp_port": _cdp_cache.get("port", 0), "cdp_ports": ports}); return
         _json_reply(self, {"error": {"message": "not found", "type": "404"}}, 404)
 
     def do_POST(self):
         u = urlparse(self.path)
         if u.path != "/v1/chat/completions":
-            _json_reply(self, {"error": {"message": "not found", "type": "404"}}, 404)
-            return
+            _json_reply(self, {"error": {"message": "not found", "type": "404"}}, 404); return
         body = self._body()
         if not self._auth_ok(str(body.get("token") or "")):
-            _json_reply(self, {"error": {"message": "forbidden", "type": "auth"}}, 403)
-            return
+            _json_reply(self, {"error": {"message": "forbidden", "type": "auth"}}, 403); return
         messages = body.get("messages") or []
         text = ""
         for m in messages:
@@ -12745,8 +13069,7 @@ class Handler(BaseHTTPRequestHandler):
         if not text.strip() and messages:
             text = str(messages[-1].get("content") or "")
         if not text.strip():
-            _json_reply(self, {"error": {"message": "empty user message", "type": "bad_request"}}, 400)
-            return
+            _json_reply(self, {"error": {"message": "empty user message", "type": "bad_request"}}, 400); return
         if FAKE:
             answer = "ردّ تجريبي من جسر كوين (وضع FAKE) — استلمت: " + text.strip()[:120]
         else:
@@ -12758,41 +13081,27 @@ class Handler(BaseHTTPRequestHandler):
                 return
         _json_reply(self, {
             "id": "chatcmpl-qwen-%d" % int(time.time()),
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": MODEL,
-            "choices": [{"index": 0,
-                         "message": {"role": "assistant", "content": answer},
+            "object": "chat.completion", "created": int(time.time()), "model": MODEL,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": answer},
                          "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": len(text) // 4,
-                      "completion_tokens": len(answer) // 4,
-                      "total_tokens": (len(text) + len(answer)) // 4},
-        })
+            "usage": {"prompt_tokens": len(text) // 4, "completion_tokens": len(answer) // 4,
+                      "total_tokens": (len(text) + len(answer)) // 4}})
 
 
 def _ensure_chrome():
-    try:
-        with socket.socket() as s:
-            s.settimeout(2)
-            if s.connect_ex(("127.0.0.1", CDP_PORT)) == 0:
-                return
-    except Exception:
+    alive = _probe_ports()
+    if alive:
         return
     try:
-        subprocess.Popen(["setsid", "/usr/local/bin/chrome-root"],
+        env = dict(os.environ, DISPLAY=DISPLAY, CHROME_SKIP_RESTORE_WAIT="1", GS_QWEN_CDP_PORT=str(CDP_PORTS[0]))
+        subprocess.Popen(["/usr/local/bin/chrome-profile", "1", CHAT_URL],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True,
-                         env=dict(os.environ, DISPLAY=DISPLAY))
+                         start_new_session=True, env=env)
     except Exception:
         pass
     for _ in range(80):
-        try:
-            with socket.socket() as s:
-                s.settimeout(1)
-                if s.connect_ex(("127.0.0.1", CDP_PORT)) == 0:
-                    return
-        except Exception:
-            pass
+        if _probe_ports():
+            return
         time.sleep(0.5)
 
 
@@ -12800,8 +13109,8 @@ def main():
     if not FAKE:
         _ensure_chrome()
     srv = ThreadingHTTPServer(("127.0.0.1", BRIDGE_PORT), Handler)
-    print("GS-QWEN-BRIDGE v2 READY http://127.0.0.1:%d/ | cdp=%d | model=%s"
-          % (BRIDGE_PORT, CDP_PORT, MODEL), flush=True)
+    print("GS-QWEN-BRIDGE v3 READY http://127.0.0.1:%d/ | cdp_ports=%s | model=%s"
+          % (BRIDGE_PORT, ",".join(str(x) for x in CDP_PORTS), MODEL), flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -29790,7 +30099,7 @@ def _handle_ai_action(client, query):
 # MCP Streamable HTTP server (stateless, tools capability)
 # ============================================================
 _MCP_SERVER_NAME = "colab-remote-desktop"
-_MCP_SERVER_VERSION = "2.3.0"
+_MCP_SERVER_VERSION = "2.4.0"
 _MCP_SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 _MCP_ENDPOINT_PATH = "/mcp/" + MCP_PATH_TOKEN
 _MCP_ENDPOINT_PATH_BYTES = _MCP_ENDPOINT_PATH.encode("ascii")
@@ -37445,7 +37754,7 @@ def _fx_run():
             except Exception:
                 pass
     globals()["_FINALIZER_V25_ASSERT"] = _fx_v14_assert
-    globals()["_FINALIZER_V29_ASSERT"] = _fx_v14_assert
+    globals()["_FINALIZER_V30_ASSERT"] = _fx_v14_assert
     globals()["_FINALIZER_V23_ASSERT"] = _fx_v14_assert
     globals()["_FINALIZER_V22_ASSERT"] = _fx_v14_assert
     globals()["_FINALIZER_V21_ASSERT"] = _fx_v14_assert
@@ -37473,7 +37782,7 @@ try:
     # التنفيذ فوري عند نهاية الإقلاع، ويُعاد تثبيته عبر حارس v121 إن وُجد.
     _fx_run()
     globals()["_FINALIZER_V25_RUN"] = _fx_run
-    globals()["_FINALIZER_V29_RUN"] = _fx_run
+    globals()["_FINALIZER_V30_RUN"] = _fx_run
     globals()["_FINALIZER_V23_RUN"] = _fx_run
     globals()["_FINALIZER_V22_RUN"] = _fx_run
     globals()["_FINALIZER_V21_RUN"] = _fx_run
@@ -37485,7 +37794,7 @@ try:
     globals()["_FINALIZER_V14_RUN"] = _fx_run
     globals()["_FINALIZER_V13_RUN"] = _fx_run  # توافق خلفي
 except Exception as _fx_exc:
-    print("[!] FINALIZER_V29_APPZOOM_LOWLATENCY تعذّر: %s" % _fx_exc, flush=True)
+    print("[!] FINALIZER_V30_QWEN38_ANDROID تعذّر: %s" % _fx_exc, flush=True)
 
 print("[OK] الصيانة العميقة: واجهة تفاعلية أولًا، حارس واحد، وفحوص منخفضة التردد ✅")
 _live_w,_live_h=_screen_current_geometry()
