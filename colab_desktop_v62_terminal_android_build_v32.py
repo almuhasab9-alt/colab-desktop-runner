@@ -5,6 +5,7 @@
 # - تثبيت تلقائي لـAndroid SDK commandline-tools/platforms/build-tools عند الحاجة.
 # - تحقق إلزامي من الـAPK (aapt/unzip) ونسخه إلى /root/Desktop وPhoneFiles.
 # - جسر Qwen v3 (زر Send، اكتشاف CDP ديناميكي، جواب نظيف) موروث من V31.
+# - إصلاح SSL/HTTP في خادم الوكيل: يختار HTTP/HTTPS حسب المخطط بدل فرض TLS على الجسر المحلي (يحل WRONG_VERSION_NUMBER).
 # v60 / FINALIZER V30 QWEN3.8-MAX + ANDROID AGENT (2026-08-17):
 # - جسر Qwen3.8-Max مقاوم لتغيّر الواجهة: يفضّل محادثة /c/ ويتجاهل auth/login.
 # - استخراج جواب selector-agnostic + اختيار أحدث Qwen Max ظاهر + مهلات أسرع.
@@ -10864,9 +10865,13 @@ def _http_post_json(url, body, timeout):
         try:
             if conn is None:
                 u = urlparse(url)
-                conn = http.client.HTTPSConnection(
-                    u.hostname, u.port or 443, timeout=timeout,
-                    context=ssl.create_default_context())
+                if u.scheme == "https":
+                    conn = http.client.HTTPSConnection(
+                        u.hostname, u.port or 443, timeout=timeout,
+                        context=ssl.create_default_context())
+                else:
+                    conn = http.client.HTTPConnection(
+                        u.hostname, u.port or 80, timeout=timeout)
                 _HTTPC[key] = conn
             conn.request("POST", urlparse(url).path or "/", payload, headers)
             resp = conn.getresponse()
