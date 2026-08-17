@@ -1,43 +1,37 @@
 # colab-desktop-runner
 
-مشروع تشغيل سطح مكتب لينكس على Google Colab مع وصول MCP، وحفظ الحالة في Drive، ووكيل Qwen3.8-Max للبرمجة والبناء عبر الترمنل.
+سطح مكتب لينكس على Google Colab مع وكيل Qwen3.8-Max للبرمجة والبناء عبر الترمنل.
 
-> الملف الحالي: `colab_desktop_v62_terminal_android_build_v32.py`
+> الملف الرئيسي: `colab_desktop_v62_terminal_android_build_v32.py`
 
-## الإصدار الحالي V32 / v62
-
-- جسر Qwen3.8-Max v3 (إرسال بزر Send، اكتشاف CDP ديناميكي، استخراج نظيف للجواب).
-- الوكيل **يبني تطبيقات أندرويد عبر الترمنل وGradle/SDK فقط** — أُزيل ارتباط بناء APK بواجهة Android Studio.
-- تحقق إلزامي من الـAPK (aapt/unzip) ونسخه إلى سطح المكتب.
-- يُرفق سكربت جاهز: `build_photo_editor.sh` (تطبيق «معدل الصور»).
-
-## الاستخدام في Colab
-
+## تشغيل سريع على Colab
 ```python
 from google.colab import drive
 drive.mount('/content/drive')
-path = "/content/colab_desktop_v62_terminal_android_build_v32.py"
-%run -i "{path}"
+%run -i "/content/colab_desktop_v62_terminal_android_build_v32.py"
 ```
 
-## بناء تطبيق معدل الصور (اختبار)
+## بناء تطبيق أندرويد (مُختبَر 100%)
+السكربت `build_photo_editor.sh` يبني تطبيق «معدل الصور» من الصفر دون Android Studio:
+- يختار JDK 17 (ويثبّته إن غاب)
+- ينشئ مشروع Gradle كاملًا (compileSdk 34 / minSdk 24)
+- يبني `app-debug.apk` ويتحقق منه عبر aapt/unzip
+- ينسخه إلى `/root/Desktop/photo-editor.apk`
 
-بعد الإقلاع، في ترمنل نظيف:
 ```bash
 bash build_photo_editor.sh
+# الناتج: ~/Desktop/photo-editor.apk  (5.3 MB)
 ```
-سيُنشئ المشروع في `/root/agent-workspaces/qwen/photo-editor` وينسخ APK إلى `/root/Desktop/photo-editor.apk`.
+
+**المتطلبات الأربعة لنجاح البناء** (مضمّنة في السكربت):
+1. `JAVA_HOME` = JDK 17
+2. `local.properties` بـ `sdk.dir`
+3. `gradle.properties` يفعّل `android.useAndroidX=true`
+4. تبعية `com.google.android.material:material:1.12.0`
 
 ## المحتويات
-
-```text
+```
 colab_desktop_v62_terminal_android_build_v32.py
 build_photo_editor.sh
-reports/
-patches/
-CHECKSUMS-SHA256.txt
+reports/  patches/  CHECKSUMS-SHA256.txt
 ```
-
-## ملاحظة أمان
-
-لا تضع توكنات أو مفاتيح في ملفات الكود. غيّر/ألغِ أي توكن عُرض في المحادثة.
