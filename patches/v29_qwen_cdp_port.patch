@@ -1,0 +1,11 @@
+--- /home/user/uploads/colab_desktop_v59_app_zoom_lowlatency_v29.txt	2026-08-17 13:35:29.495845422 +0000
++++ ./colab_desktop_v59_app_zoom_lowlatency_v29.py	2026-08-17 13:43:43.320524755 +0000
+@@ -6144,7 +6144,7 @@
+   --force-device-scale-factor=${CHROME_SCALE} --high-dpi-support=1 \
+   \
+   --disable-smooth-scrolling \
+-  --remote-debugging-address=127.0.0.1 --remote-debugging-port="${GS_QWEN_CDP_PORT:-9223}" \
++  --remote-debugging-address=127.0.0.1 --remote-debugging-port="${GS_QWEN_CDP_PORT:-9224}" \
+   --user-data-dir="$CHROME_USER_DATA_DIR" --password-store=basic "$@"
+ """
+ # V28: طبقة حركة مخفّضة لا تحجب الصور أو JavaScript؛ تُنهي CSS animations/

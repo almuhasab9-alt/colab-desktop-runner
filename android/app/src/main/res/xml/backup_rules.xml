@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- استبعاد بيانات WebView الحساسة من النسخ الاحتياطي التلقائي -->
-<full-backup-content>
-    <exclude domain="database" path="." />
-    <exclude domain="file" path="app_webview/" />
-    <exclude domain="file" path="app_webview_devtools_remote/" />
-    <exclude domain="sharedpref" path="WebViewChromiumPrefs.xml" />
-</full-backup-content>
